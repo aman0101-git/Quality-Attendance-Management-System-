@@ -1,0 +1,41 @@
+# dependencies
+node_modules/
+
+# build
+dist/
+build/
+.next/
+coverage/
+
+# logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# env
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# cache
+.cache/
+.temp/
+tmp/
+
+# prisma generated
+generated/
+
+# vite
+vite.svg
