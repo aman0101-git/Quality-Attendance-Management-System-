@@ -1,0 +1,80 @@
+/* ============================================================
+ * QAMS Animation Utilities
+ * Subtle, enterprise-grade motion. Used both via class names
+ * and through Framer Motion's variants.
+ * ============================================================ */
+
+@keyframes qams-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes qams-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes qams-skeleton-pulse {
+  0% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes qams-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-fade-in {
+  animation: qams-fade-in var(--duration-base) var(--ease-out-soft) both;
+}
+
+.animate-fade-up {
+  animation: qams-fade-up var(--duration-slow) var(--ease-out-soft) both;
+}
+
+.animate-skeleton {
+  animation: qams-skeleton-pulse 1.6s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    rgb(var(--bg-muted)) 0%,
+    rgb(var(--border)) 35%,
+    rgb(var(--bg-muted)) 70%
+  );
+  background-size: 200% 100%;
+  animation: qams-shimmer 1.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-fade-up,
+  .animate-skeleton,
+  .animate-shimmer {
+    animation: none !important;
+  }
+}

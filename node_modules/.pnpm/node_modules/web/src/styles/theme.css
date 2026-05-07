@@ -1,0 +1,136 @@
+/* ============================================================
+ * QAMS Theme Tokens
+ * Dark-first enterprise palette with purple/blue accents.
+ * Tokens are exposed both as raw CSS variables and as
+ * Tailwind v4 @theme tokens via globals.css.
+ * ============================================================ */
+
+:root {
+  /* Spacing scale (rem) — incremental enterprise rhythm */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* Radius */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "Fira Code",
+    Consolas, monospace;
+
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.8125rem;
+  --fs-base: 0.9rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.375rem;
+  --fs-2xl: 1.75rem;
+  --fs-3xl: 2.125rem;
+
+  /* Animation timing */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 260ms;
+
+  /* Sidebar widths */
+  --sidebar-width: 260px;
+  --sidebar-width-collapsed: 76px;
+  --header-height: 60px;
+}
+
+/* ----------------------------------------------------------
+ * LIGHT
+ * ---------------------------------------------------------- */
+:root,
+:root.light {
+  color-scheme: light;
+
+  --bg: 248 250 252;            /* slate-50 */
+  --bg-elevated: 255 255 255;
+  --bg-muted: 241 245 249;       /* slate-100 */
+
+  --surface: 255 255 255;
+  --surface-glass: 255 255 255;
+  --surface-glass-alpha: 0.65;
+
+  --border: 226 232 240;         /* slate-200 */
+  --border-strong: 203 213 225;  /* slate-300 */
+
+  --fg: 15 23 42;                /* slate-900 */
+  --fg-muted: 71 85 105;         /* slate-600 */
+  --fg-subtle: 100 116 139;      /* slate-500 */
+
+  --accent: 124 92 255;          /* purple */
+  --accent-fg: 255 255 255;
+  --accent-soft: 233 226 255;
+
+  --info: 59 130 246;
+  --success: 22 163 74;
+  --warning: 217 119 6;
+  --danger: 220 38 38;
+
+  --ring: 124 92 255;
+
+  --shadow-elev-1: 0 1px 2px rgba(15, 23, 42, 0.06),
+    0 1px 3px rgba(15, 23, 42, 0.08);
+  --shadow-elev-2: 0 4px 12px -2px rgba(15, 23, 42, 0.08),
+    0 2px 4px -1px rgba(15, 23, 42, 0.06);
+  --shadow-elev-3: 0 12px 32px -6px rgba(15, 23, 42, 0.12),
+    0 4px 12px -2px rgba(15, 23, 42, 0.08);
+}
+
+/* ----------------------------------------------------------
+ * DARK (default)
+ * ---------------------------------------------------------- */
+:root.dark,
+.dark {
+  color-scheme: dark;
+
+  --bg: 9 11 18;                 /* near-black with blue tint */
+  --bg-elevated: 14 16 24;
+  --bg-muted: 19 22 32;
+
+  --surface: 17 19 28;
+  --surface-glass: 22 25 36;
+  --surface-glass-alpha: 0.62;
+
+  --border: 36 40 54;
+  --border-strong: 56 62 82;
+
+  --fg: 237 240 248;
+  --fg-muted: 173 181 200;
+  --fg-subtle: 132 142 165;
+
+  --accent: 139 110 255;
+  --accent-fg: 255 255 255;
+  --accent-soft: 47 36 96;
+
+  --info: 96 165 250;
+  --success: 52 211 153;
+  --warning: 251 191 36;
+  --danger: 248 113 113;
+
+  --ring: 139 110 255;
+
+  --shadow-elev-1: 0 1px 2px rgba(0, 0, 0, 0.4),
+    0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-elev-2: 0 4px 16px -2px rgba(0, 0, 0, 0.45),
+    0 2px 6px -1px rgba(0, 0, 0, 0.35);
+  --shadow-elev-3: 0 18px 40px -10px rgba(0, 0, 0, 0.6),
+    0 6px 16px -4px rgba(0, 0, 0, 0.4);
+}

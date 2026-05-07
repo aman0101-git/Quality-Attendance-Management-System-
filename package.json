@@ -1,0 +1,19 @@
+{
+  "name": "qams",
+  "private": true,
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev:api": "pnpm -C apps/api start:dev",
+    "dev:web": "pnpm -C apps/web dev",
+    "dev": "concurrently \"pnpm dev:api\" \"pnpm dev:web\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.33.2",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
