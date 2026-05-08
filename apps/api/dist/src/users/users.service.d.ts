@@ -23,6 +23,9 @@ export declare class UsersService {
         createdAt: Date;
         updatedAt: Date;
     } | null>;
+    listUsers(filter?: {
+        role?: Role;
+    }): Promise<SafeUser[]>;
     createUserAsActor(actorRole: Role, dto: CreateUserDto): Promise<SafeUser>;
     createUser(data: {
         username: string;

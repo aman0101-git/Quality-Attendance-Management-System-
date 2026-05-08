@@ -6,6 +6,8 @@ import DashboardLayout from "@/layouts/DashboardLayout";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import SupervisorDashboard from "@/pages/supervisor/SupervisorDashboard";
 import AgentDashboard from "@/pages/agent/AgentDashboard";
+import ProjectsPage from "@/pages/supervisor/ProjectsPage";
+import AgentsPage from "@/pages/supervisor/AgentsPage";
 import { useAuthStore } from "@/features/auth/store/authStore";
 
 /** Send the user to their role's home, or to login if anonymous. */
@@ -53,6 +55,22 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={["SUPERVISOR"]}>
             <SupervisorDashboard />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/supervisor/projects",
+        element: (
+          <ProtectedRoute allowedRoles={["SUPERVISOR"]}>
+            <ProjectsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/supervisor/agents",
+        element: (
+          <ProtectedRoute allowedRoles={["SUPERVISOR"]}>
+            <AgentsPage />
           </ProtectedRoute>
         ),
       },

@@ -73,6 +73,13 @@ let UsersService = class UsersService {
             where: { username },
         });
     }
+    async listUsers(filter = {}) {
+        const rows = await this.prisma.user.findMany({
+            where: { role: filter.role },
+            orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
+        });
+        return rows.map(toSafeUser);
+    }
     async createUserAsActor(actorRole, dto) {
         const allowed = ROLE_CREATION_MATRIX[actorRole] ?? [];
         if (!allowed.includes(dto.role)) {

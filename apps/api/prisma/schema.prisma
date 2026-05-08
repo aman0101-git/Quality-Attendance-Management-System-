@@ -18,6 +18,11 @@ enum Role {
   AGENT
 }
 
+enum ProjectStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model User {
   id            String   @id @default(cuid())
   username      String   @unique
@@ -27,4 +32,30 @@ model User {
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  // Reverse relation: projects this user has created
+  projectsCreated Project[] @relation("ProjectCreator")
+}
+
+/// A project belongs to a logical group (e.g. "Insurance", "Real Estate") and
+/// is referenced during call audits. Supervisors create projects under their
+/// account; the audit module will later filter by `groupName` + `status`.
+model Project {
+  id          Int           @id @default(autoincrement())
+  projectName String        @map("project_name") @db.VarChar(100)
+  groupName   String        @map("group_name") @db.VarChar(100)
+  description String?       @db.VarChar(255)
+  status      ProjectStatus @default(ACTIVE)
+  isActive    Boolean       @default(true) @map("is_active")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  createdById String @map("created_by")
+  createdBy   User   @relation("ProjectCreator", fields: [createdById], references: [id])
+
+  @@unique([projectName, groupName], name: "uniq_project_per_group")
+  @@index([groupName])
+  @@index([status])
+  @@index([isActive])
+  @@map("projects")
 }

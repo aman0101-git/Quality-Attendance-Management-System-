@@ -66,6 +66,18 @@ export class UsersService {
   }
 
   /**
+   * List users, optionally filtered by role. Used by the Agents page.
+   * Always returns the safe shape (no `passwordHash`).
+   */
+  async listUsers(filter: { role?: Role } = {}): Promise<SafeUser[]> {
+    const rows = await this.prisma.user.findMany({
+      where: { role: filter.role },
+      orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
+    });
+    return rows.map(toSafeUser);
+  }
+
+  /**
    * Create a user, performing:
    *   - role-permission check (actor → target role)
    *   - duplicate-username check (returns 409 instead of relying on the DB error)
