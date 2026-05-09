@@ -32,6 +32,7 @@ export const SIDEBAR_CONFIG: Record<UserRole, NavGroup[]> = {
       items: [
         { label: "Users", path: "/admin/users", icon: Users },
         { label: "Roles", path: "/admin/roles", icon: ShieldCheck },
+        { label: "Scorecards", path: "/admin/scorecards", icon: ClipboardList },
         { label: "Settings", path: "/admin/settings", icon: Settings },
       ],
     },

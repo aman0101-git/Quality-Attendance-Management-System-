@@ -23,6 +23,25 @@ enum ProjectStatus {
   INACTIVE
 }
 
+/// Audit lifecycle. Transitions are enforced server-side:
+///   DRAFT       → IN_PROGRESS → SUBMITTED → COMPLETED
+///   SUBMITTED   → IN_PROGRESS  (re-open by supervisor)
+enum AuditStatus {
+  DRAFT
+  IN_PROGRESS
+  SUBMITTED
+  COMPLETED
+}
+
+/// Type of question rendered inside a scorecard. The UI maps these to the
+/// appropriate input control; the score engine maps them to a numeric value.
+enum AuditQuestionType {
+  YES_NO
+  MULTIPLE_CHOICE
+  RATING
+  FREE_TEXT
+}
+
 model User {
   id            String   @id @default(cuid())
   username      String   @unique
@@ -35,6 +54,13 @@ model User {
 
   // Reverse relation: projects this user has created
   projectsCreated Project[] @relation("ProjectCreator")
+
+  // Reverse relations for the audit module.
+  auditsAsAgent      Audit[] @relation("AuditAgent")
+  auditsAsSupervisor Audit[] @relation("AuditSupervisor")
+  auditsCreated      Audit[] @relation("AuditCreator")
+  auditsReviewed     Audit[] @relation("AuditReviewer")
+  scorecardsCreated  ScorecardTemplate[] @relation("ScorecardCreator")
 }
 
 /// A project belongs to a logical group (e.g. "Insurance", "Real Estate") and
@@ -53,9 +79,267 @@ model Project {
   createdById String @map("created_by")
   createdBy   User   @relation("ProjectCreator", fields: [createdById], references: [id])
 
+  // Reverse relation: audits performed against this project.
+  audits Audit[] @relation("AuditProject")
+
   @@unique([projectName, groupName], name: "uniq_project_per_group")
   @@index([groupName])
   @@index([status])
   @@index([isActive])
   @@map("projects")
+}
+
+// =====================================================================
+//  SCORECARD TEMPLATES
+//  ----------------------------------------------------------------
+//  Scorecards are group-aware first (audit form changes per `groupName`)
+//  and project-aware later (a `projectId` column is reserved).
+//  A snapshot of the template + sections + questions is copied onto
+//  the Audit at submission time so historical audits never drift if
+//  the template is later edited.
+// =====================================================================
+
+/// A reusable scorecard template. The template defines the structure;
+/// per-audit answers live in `AuditAnswer`.
+model ScorecardTemplate {
+  id          Int      @id @default(autoincrement())
+  name        String   @db.VarChar(120)
+  description String?  @db.VarChar(255)
+
+  /// Group binding — required so we can resolve the right scorecard
+  /// when a supervisor picks a group during the audit wizard.
+  groupName   String   @map("group_name") @db.VarChar(100)
+
+  /// Future: project-aware override. Null means "applies to whole group".
+  projectId   Int?     @map("project_id")
+
+  isActive    Boolean  @default(true) @map("is_active")
+
+  /// At most one row should have `isDefault = true` at a time — enforced
+  /// in `ScorecardsService`. The audit wizard always uses the default
+  /// template; supervisors don't pick a scorecard per audit.
+  isDefault   Boolean  @default(false) @map("is_default")
+
+  /// Bumped whenever the structure (sections/questions) is replaced via
+  /// `PATCH /scorecards/:id/structure`. Old audits keep their own
+  /// `scorecardSnapshot`, so version bumps never break historical audits.
+  version     Int      @default(1)
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt        @map("updated_at")
+
+  createdById String   @map("created_by")
+  createdBy   User     @relation("ScorecardCreator", fields: [createdById], references: [id])
+
+  sections ScorecardSection[]
+  audits   Audit[]            @relation("AuditScorecard")
+
+  @@index([groupName])
+  @@index([projectId])
+  @@index([isActive])
+  @@index([isDefault])
+  @@map("scorecard_templates")
+}
+
+/// A weighted section that groups related questions on a scorecard.
+model ScorecardSection {
+  id           Int    @id @default(autoincrement())
+  templateId   Int    @map("template_id")
+  title        String @db.VarChar(160)
+  description  String? @db.VarChar(255)
+  weight       Float  @default(1.0)
+  /// Display order (low → high) on the wizard.
+  position     Int    @default(0)
+
+  template     ScorecardTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  questions    ScorecardQuestion[]
+
+  @@index([templateId])
+  @@map("scorecard_sections")
+}
+
+/// A single scorecard question.
+///
+/// `optionsJson` carries question-type specific configuration:
+///   YES_NO          → ignored
+///   MULTIPLE_CHOICE → [{ label: string, score: number }]
+///   RATING          → { scale: number }   // e.g. 1–5
+///   FREE_TEXT       → ignored
+model ScorecardQuestion {
+  id           Int    @id @default(autoincrement())
+  sectionId    Int    @map("section_id")
+  prompt       String @db.VarChar(500)
+  helpText     String? @db.VarChar(500) @map("help_text")
+  type         AuditQuestionType
+  weight       Float  @default(1.0)
+
+  /// If false, the answer is collected but never contributes to the score.
+  scoring      Boolean @default(true)
+
+  /// Fatal questions force the section/audit score to 0 when failed.
+  fatal        Boolean @default(false)
+
+  /// Compliance questions are tracked and surfaced separately on reports.
+  compliance   Boolean @default(false)
+
+  /// Whether the agent must answer this question to submit.
+  required     Boolean @default(true)
+
+  position     Int     @default(0)
+
+  optionsJson  Json?   @map("options_json")
+
+  section ScorecardSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([sectionId])
+  @@map("scorecard_questions")
+}
+
+// =====================================================================
+//  AUDITS
+//  ----------------------------------------------------------------
+//  An audit is exactly: 1 supervisor + 1 agent + 1 call reference,
+//  scored against a snapshot of a scorecard template.
+// =====================================================================
+
+model Audit {
+  id           Int          @id @default(autoincrement())
+
+  /// Human-readable code (e.g. AUD-20260508-0001).
+  auditCode    String       @unique @map("audit_code") @db.VarChar(40)
+
+  status       AuditStatus  @default(DRAFT)
+
+  agentId      String       @map("agent_id")
+  agent        User         @relation("AuditAgent", fields: [agentId], references: [id])
+
+  supervisorId String       @map("supervisor_id")
+  supervisor   User         @relation("AuditSupervisor", fields: [supervisorId], references: [id])
+
+  projectId    Int          @map("project_id")
+  project      Project      @relation("AuditProject", fields: [projectId], references: [id])
+
+  /// Snapshots, frozen at audit creation. Allow accurate historical reads
+  /// even if the project/scorecard is later renamed or edited.
+  groupNameSnapshot   String  @map("group_name_snapshot") @db.VarChar(100)
+  projectNameSnapshot String  @map("project_name_snapshot") @db.VarChar(120)
+  scorecardSnapshot   Json?   @map("scorecard_snapshot")
+
+  /// Reference to the underlying call (recording id, ticket id, …).
+  callReference String  @map("call_reference") @db.VarChar(120)
+
+  /// Server-calculated, persisted on every save.
+  totalScore   Float?  @map("total_score")
+  finalScore   Float?  @map("final_score")
+  fatalTriggered Boolean @default(false) @map("fatal_triggered")
+
+  overallComment String? @db.Text @map("overall_comment")
+
+  /// FK to the template used. Snapshot holds the historical structure.
+  scorecardTemplateId Int? @map("scorecard_template_id")
+  scorecardTemplate   ScorecardTemplate? @relation("AuditScorecard", fields: [scorecardTemplateId], references: [id])
+
+  createdById  String   @map("created_by")
+  createdBy    User     @relation("AuditCreator", fields: [createdById], references: [id])
+
+  reviewedById String?  @map("reviewed_by")
+  reviewedBy   User?    @relation("AuditReviewer", fields: [reviewedById], references: [id])
+
+  submittedAt  DateTime? @map("submitted_at")
+  completedAt  DateTime? @map("completed_at")
+
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt        @map("updated_at")
+
+  sections AuditSection[]
+  answers  AuditAnswer[]
+
+  @@index([agentId])
+  @@index([supervisorId])
+  @@index([projectId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("audits")
+}
+
+/// Per-audit copy of a scorecard section — frozen at audit creation
+/// so later template edits don't change historical numbers.
+model AuditSection {
+  id            Int    @id @default(autoincrement())
+  auditId       Int    @map("audit_id")
+  /// FK back to the source section if it still exists. Snapshot fields
+  /// are the source of truth.
+  sourceSectionId Int? @map("source_section_id")
+
+  title         String @db.VarChar(160)
+  weight        Float  @default(1.0)
+  position      Int    @default(0)
+
+  /// Server-calculated section score (0..100).
+  sectionScore  Float? @map("section_score")
+  remark        String? @db.VarChar(500)
+
+  audit  Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  answers AuditAnswer[]
+
+  @@index([auditId])
+  @@map("audit_sections")
+}
+
+/// Per-audit copy of a question.
+model AuditQuestion {
+  id          Int    @id @default(autoincrement())
+  auditId     Int    @map("audit_id")
+  sectionId   Int    @map("section_id")
+  sourceQuestionId Int? @map("source_question_id")
+
+  prompt      String @db.VarChar(500)
+  helpText    String? @db.VarChar(500) @map("help_text")
+  type        AuditQuestionType
+  weight      Float  @default(1.0)
+  scoring     Boolean @default(true)
+  fatal       Boolean @default(false)
+  compliance  Boolean @default(false)
+  required    Boolean @default(true)
+  position    Int    @default(0)
+  optionsJson Json?  @map("options_json")
+
+  answers AuditAnswer[]
+
+  @@index([auditId])
+  @@index([sectionId])
+  @@map("audit_questions")
+}
+
+/// The supervisor's response to a single question.
+///
+/// `value` carries the type-appropriate response:
+///   YES_NO          → "yes" | "no" | "na"
+///   MULTIPLE_CHOICE → option label
+///   RATING          → numeric string ("1".."5")
+///   FREE_TEXT       → free text
+model AuditAnswer {
+  id            Int    @id @default(autoincrement())
+  auditId       Int    @map("audit_id")
+  sectionId     Int    @map("section_id")
+  questionId    Int    @map("question_id")
+
+  value         String? @db.Text
+  /// Server-calculated normalized 0..1 score for this answer.
+  normalizedScore Float? @map("normalized_score")
+  /// Whether this answer triggered a fatal flag.
+  fatalHit      Boolean @default(false) @map("fatal_hit")
+  remark        String? @db.VarChar(500)
+
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt        @map("updated_at")
+
+  audit    Audit         @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  section  AuditSection  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  question AuditQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([auditId, questionId], name: "uniq_audit_question")
+  @@index([auditId])
+  @@index([questionId])
+  @@map("audit_answers")
 }

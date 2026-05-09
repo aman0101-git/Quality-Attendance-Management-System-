@@ -8,6 +8,8 @@ import SupervisorDashboard from "@/pages/supervisor/SupervisorDashboard";
 import AgentDashboard from "@/pages/agent/AgentDashboard";
 import ProjectsPage from "@/pages/supervisor/ProjectsPage";
 import AgentsPage from "@/pages/supervisor/AgentsPage";
+import AuditsPage from "@/pages/supervisor/AuditsPage";
+import ScorecardsPage from "@/pages/admin/ScorecardsPage";
 import { useAuthStore } from "@/features/auth/store/authStore";
 
 /** Send the user to their role's home, or to login if anonymous. */
@@ -51,6 +53,14 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: "/admin/scorecards",
+        element: (
+          <ProtectedRoute allowedRoles={["ADMIN"]}>
+            <ScorecardsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
         path: "/supervisor",
         element: (
           <ProtectedRoute allowedRoles={["SUPERVISOR"]}>
@@ -71,6 +81,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute allowedRoles={["SUPERVISOR"]}>
             <AgentsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/supervisor/audits",
+        element: (
+          <ProtectedRoute allowedRoles={["SUPERVISOR"]}>
+            <AuditsPage />
           </ProtectedRoute>
         ),
       },
