@@ -7,7 +7,7 @@ import {
   MaxLength,
   ValidateNested,
 } from "class-validator";
-import { ACPT_CATEGORIES, ACPT_LEVEL_MAX, OVERALL_COMMENT_MAX } from "../audit.constants";
+import { ACPT_CATEGORIES, ACPT_LEVEL_MAX, AUDIT_NOTE_MAX, OVERALL_COMMENT_MAX } from "../audit.constants";
 import { AnswerInputDto, SectionRemarkInputDto } from "./update-audit.dto";
 
 /**
@@ -48,6 +48,18 @@ export class SubmitAuditDto {
   @IsString()
   @MaxLength(ACPT_LEVEL_MAX)
   acptLevel3?: string | null;
+
+  /** Supervisor's observation about the call. Null to clear. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(AUDIT_NOTE_MAX)
+  callObservation?: string | null;
+
+  /** Supervisor's improvement notes. Null to clear. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(AUDIT_NOTE_MAX)
+  areaOfImprovement?: string | null;
 }
 
 /**

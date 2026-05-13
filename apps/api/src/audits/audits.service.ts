@@ -272,6 +272,21 @@ export class AuditsService {
       });
     }
 
+    // Persist audit-level qualitative notes (call observation, area of improvement).
+    if (dto.callObservation !== undefined || dto.areaOfImprovement !== undefined) {
+      await this.prisma.audit.update({
+        where: { id: audit.id },
+        data: {
+          ...(dto.callObservation !== undefined
+            ? { callObservation: dto.callObservation ?? null }
+            : {}),
+          ...(dto.areaOfImprovement !== undefined
+            ? { areaOfImprovement: dto.areaOfImprovement ?? null }
+            : {}),
+        },
+      });
+    }
+
     if (dto.answers && dto.answers.length > 0) {
       await this.upsertAnswers(audit.id, dto.answers);
     }
@@ -341,6 +356,21 @@ export class AuditsService {
             : {}),
           ...(dto.acptLevel3 !== undefined
             ? { acptLevel3: dto.acptLevel3 ?? null }
+            : {}),
+        },
+      });
+    }
+
+    // Persist audit-level qualitative notes.
+    if (dto.callObservation !== undefined || dto.areaOfImprovement !== undefined) {
+      await this.prisma.audit.update({
+        where: { id: audit.id },
+        data: {
+          ...(dto.callObservation !== undefined
+            ? { callObservation: dto.callObservation ?? null }
+            : {}),
+          ...(dto.areaOfImprovement !== undefined
+            ? { areaOfImprovement: dto.areaOfImprovement ?? null }
             : {}),
         },
       });
@@ -594,6 +624,8 @@ export class AuditsService {
       scorecardTemplateId: row.scorecardTemplateId,
       sections: sectionResponses,
       supervisorCorrectionNote: row.supervisorCorrectionNote ?? null,
+      callObservation: row.callObservation ?? null,
+      areaOfImprovement: row.areaOfImprovement ?? null,
     };
   }
 
@@ -974,6 +1006,8 @@ function toListItem(row: {
   acptCategory?: string | null;
   acptLevel2?: string | null;
   acptLevel3?: string | null;
+  callObservation?: string | null;
+  areaOfImprovement?: string | null;
   agent: { id: string; name: string; username: string };
   supervisor: { id: string; name: string; username: string };
   project: { id: number; projectName: string; groupName: string };
@@ -1010,6 +1044,8 @@ function toListItem(row: {
     acptCategory: row.acptCategory ?? null,
     acptLevel2: row.acptLevel2 ?? null,
     acptLevel3: row.acptLevel3 ?? null,
+    callObservation: row.callObservation ?? null,
+    areaOfImprovement: row.areaOfImprovement ?? null,
   };
 }
 

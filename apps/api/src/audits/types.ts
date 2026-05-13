@@ -56,6 +56,15 @@ export interface AuditListItem {
   acptLevel2: string | null;
   /** Free-text Level 3 observations. Null if not filled. */
   acptLevel3: string | null;
+
+  // -----------------------------------------------------------------------
+  //  Audit-level qualitative notes (replaces old per-section remarks).
+  //  Both are null on legacy audits (pre-notes migration).
+  // -----------------------------------------------------------------------
+  /** Supervisor's observation notes about the call. Null if not filled. */
+  callObservation: string | null;
+  /** Supervisor's improvement notes for the agent. Null if not filled. */
+  areaOfImprovement: string | null;
 }
 
 export interface AuditQuestionOption {
@@ -108,6 +117,9 @@ export interface AuditDetailResponse extends AuditListItem {
    * answers -- it's a separate, append-only field surfaced alongside.
    */
   supervisorCorrectionNote: string | null;
+  // callObservation and areaOfImprovement are inherited from AuditListItem
+  // but explicitly documented here for clarity since the detail response
+  // is the primary surface where supervisors read and write them.
 }
 
 export interface AuditScoreSummary {

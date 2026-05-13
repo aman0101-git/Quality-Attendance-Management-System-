@@ -4,7 +4,6 @@ import {
   FolderKanban,
   History,
   LayoutDashboard,
-  Trophy,
   UserSquare2,
   Users,
 } from "lucide-react";
@@ -73,7 +72,9 @@ export const SIDEBAR_CONFIG: Record<UserRole, NavGroup[]> = {
       heading: "Performance",
       items: [
         { label: "My Audits", path: "/agent/audits", icon: ClipboardList },
-        { label: "My Scores", path: "/agent/scores", icon: Trophy },
+        // "My Scores" removed — /agent/scores renders the same MyAuditsPage
+        // component as /agent/audits with no lens applied, making it a
+        // pure duplicate. "Audit History" below covers the reviewed-only view.
         {
           label: "Audit History",
           path: "/agent/audits?lens=REVIEWED",

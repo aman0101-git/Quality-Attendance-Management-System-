@@ -14,6 +14,7 @@ import {
 import {
   ACPT_CATEGORIES,
   ACPT_LEVEL_MAX,
+  AUDIT_NOTE_MAX,
   OVERALL_COMMENT_MAX,
   REMARK_MAX,
 } from "../audit.constants";
@@ -125,4 +126,22 @@ export class UpdateAuditDto {
   @IsString()
   @MaxLength(ACPT_LEVEL_MAX)
   acptLevel3?: string | null;
+
+  // -----------------------------------------------------------------------
+  //  Audit-level qualitative notes (replaces per-section remarks).
+  //  Using a generous max-length so autosave never rejects a long note
+  //  mid-typing -- the old 500-char section remark caused a 400 loop.
+  // -----------------------------------------------------------------------
+
+  /** Supervisor's observation about the call. Null to clear. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(AUDIT_NOTE_MAX)
+  callObservation?: string | null;
+
+  /** Supervisor's improvement notes. Null to clear. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(AUDIT_NOTE_MAX)
+  areaOfImprovement?: string | null;
 }

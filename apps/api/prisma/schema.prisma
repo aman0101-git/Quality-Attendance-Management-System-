@@ -254,6 +254,12 @@ model Audit {
 
   overallComment String? @db.Text @map("overall_comment")
 
+  /// Audit-level qualitative notes added by the supervisor.
+  /// These two fields replace the old per-section remark approach and
+  /// are strictly informational — they never influence scoring.
+  callObservation    String? @map("call_observation")    @db.LongText
+  areaOfImprovement  String? @map("area_of_improvement") @db.LongText
+
   /// FK to the template used. Snapshot holds the historical structure.
   scorecardTemplateId Int? @map("scorecard_template_id")
   scorecardTemplate   ScorecardTemplate? @relation("AuditScorecard", fields: [scorecardTemplateId], references: [id])

@@ -99,6 +99,15 @@ export interface AuditListItem {
   acptLevel2: string | null;
   /** Free-text Level 3 observations. Null if not filled. */
   acptLevel3: string | null;
+
+  // -----------------------------------------------------------------------
+  //  Audit-level qualitative notes (replaces old per-section remarks).
+  //  Both are null on legacy audits (pre-notes migration).
+  // -----------------------------------------------------------------------
+  /** Supervisor's observation notes about the call. Null if not filled. */
+  callObservation: string | null;
+  /** Supervisor's improvement notes for the agent. Null if not filled. */
+  areaOfImprovement: string | null;
 }
 
 export interface AuditQuestionOption {

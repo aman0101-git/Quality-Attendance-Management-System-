@@ -84,6 +84,8 @@ export class AgentAuditsService {
       acknowledgmentMode: r.acknowledgmentMode ?? null,
       acknowledgmentRemark: r.acknowledgmentRemark ?? null,
       completedAt: r.completedAt,
+      callObservation: r.callObservation ?? null,
+      areaOfImprovement: r.areaOfImprovement ?? null,
       acptCategory: r.acptCategory ?? null,
       acptLevel2: r.acptLevel2 ?? null,
       acptLevel3: r.acptLevel3 ?? null,

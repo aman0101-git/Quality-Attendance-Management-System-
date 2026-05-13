@@ -39,6 +39,15 @@ export const OVERALL_COMMENT_MAX = 2000;
 export const REMARK_MAX = 500;
 
 /**
+ * Max length for the two audit-level qualitative note fields
+ * (`callObservation` and `areaOfImprovement`). Generous so that
+ * supervisors are never rejected by the validator mid-sentence, which
+ * was the root cause of the autosave 400 loop with the old 500-char
+ * section-remark limit.
+ */
+export const AUDIT_NOTE_MAX = 5000;
+
+/**
  * Valid ACPT category values. ACPT is a qualitative, non-scoring section
  * where the supervisor categorises and describes call observations.
  *

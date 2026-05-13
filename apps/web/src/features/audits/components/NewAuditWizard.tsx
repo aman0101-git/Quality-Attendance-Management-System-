@@ -124,13 +124,18 @@ export function NewAuditWizard({
   const [acptLevel2, setAcptLevel2] = useState("");
   const [acptLevel3, setAcptLevel3] = useState("");
 
+  // Audit-level qualitative notes (replaces per-section remarks).
+  const [callObservation, setCallObservation] = useState("");
+  const [areaOfImprovement, setAreaOfImprovement] = useState("");
+
   const autosaveTimer = useRef<number | null>(null);
   const dirtyRef = useRef<{
     answerIds: Set<number>;
     sectionIds: Set<number>;
     overallChanged: boolean;
     acptChanged: boolean;
-  }>({ answerIds: new Set(), sectionIds: new Set(), overallChanged: false, acptChanged: false });
+    notesChanged: boolean;
+  }>({ answerIds: new Set(), sectionIds: new Set(), overallChanged: false, acptChanged: false, notesChanged: false });
 
   // ------------------------------------------------------------
   //  Initial data loads
@@ -200,6 +205,10 @@ export function NewAuditWizard({
     setAcptCategory(detail.acptCategory ?? null);
     setAcptLevel2(detail.acptLevel2 ?? "");
     setAcptLevel3(detail.acptLevel3 ?? "");
+
+    // Audit-level notes — null on legacy audits.
+    setCallObservation(detail.callObservation ?? "");
+    setAreaOfImprovement(detail.areaOfImprovement ?? "");
 
     const nextAnswers: AnswerDraftMap = {};
     const nextRemarks: SectionRemarkMap = {};
@@ -345,7 +354,8 @@ export function NewAuditWizard({
       dirty.answerIds.size === 0 &&
       dirty.sectionIds.size === 0 &&
       !dirty.overallChanged &&
-      !dirty.acptChanged
+      !dirty.acptChanged &&
+      !dirty.notesChanged
     ) {
       return;
     }
@@ -378,6 +388,13 @@ export function NewAuditWizard({
             acptLevel3: acptLevel3.trim() || null,
           }
         : {}),
+      // Audit-level qualitative notes.
+      ...(dirty.notesChanged
+        ? {
+            callObservation: callObservation.trim() || null,
+            areaOfImprovement: areaOfImprovement.trim() || null,
+          }
+        : {}),
     };
 
     setSaving(true);
@@ -390,13 +407,14 @@ export function NewAuditWizard({
       dirty.sectionIds.clear();
       dirty.overallChanged = false;
       dirty.acptChanged = false;
+      dirty.notesChanged = false;
     } catch (e) {
       console.error(e);
       toast.error("Autosave failed");
     } finally {
       setSaving(false);
     }
-  }, [audit, answers, sectionRemarks, overallComment, acptCategory, acptLevel2, acptLevel3]);
+  }, [audit, answers, sectionRemarks, overallComment, acptCategory, acptLevel2, acptLevel3, callObservation, areaOfImprovement]);
 
   const scheduleAutosave = useCallback(() => {
     if (!audit) return;
@@ -490,6 +508,25 @@ export function NewAuditWizard({
     [scheduleAutosave],
   );
 
+  // Audit-level qualitative note handlers.
+  const onCallObservation = useCallback(
+    (val: string) => {
+      setCallObservation(val);
+      dirtyRef.current.notesChanged = true;
+      scheduleAutosave();
+    },
+    [scheduleAutosave],
+  );
+
+  const onAreaOfImprovement = useCallback(
+    (val: string) => {
+      setAreaOfImprovement(val);
+      dirtyRef.current.notesChanged = true;
+      scheduleAutosave();
+    },
+    [scheduleAutosave],
+  );
+
   // ------------------------------------------------------------
   //  Submit
   // ------------------------------------------------------------
@@ -574,6 +611,8 @@ export function NewAuditWizard({
         acptCategory,
         acptLevel2: acptLevel2.trim() || null,
         acptLevel3: acptLevel3.trim() || null,
+        callObservation: callObservation.trim() || null,
+        areaOfImprovement: areaOfImprovement.trim() || null,
       });
       setAudit(finalAudit);
       // Re-ingest the finalized server detail so the UI mirrors what
@@ -584,6 +623,7 @@ export function NewAuditWizard({
       dirtyRef.current.sectionIds.clear();
       dirtyRef.current.overallChanged = false;
       dirtyRef.current.acptChanged = false;
+      dirtyRef.current.notesChanged = false;
       toast.success(`Audit ${finalAudit.auditCode} submitted`);
     } catch (e) {
       const err = e as AxiosError<{ message?: string | string[] }>;
@@ -927,11 +967,9 @@ export function NewAuditWizard({
                 <ScoreCardFiller
                   sections={audit.sections}
                   answers={answers}
-                  sectionRemarks={sectionRemarks}
                   readOnly={isReadOnly}
                   onAnswer={onAnswer}
                   onAnswerRemark={onAnswerRemark}
-                  onSectionRemark={onSectionRemark}
                 />
               </div>
             )}
@@ -1016,6 +1054,49 @@ export function NewAuditWizard({
             />
           </div>
 
+          {/* Audit-level qualitative notes */}
+          <div className="mt-6 border-t border-border pt-5">
+            <p className="mb-4 text-[11px] font-medium uppercase tracking-wider text-fg-muted">
+              Call notes
+            </p>
+
+            <div className="mb-4">
+              <label className="text-xs font-medium text-fg-muted">
+                Call Observation
+              </label>
+              <textarea
+                rows={4}
+                value={callObservation}
+                onChange={(e) => onCallObservation(e.target.value)}
+                placeholder="Describe what was observed during the call…"
+                disabled={isReadOnly}
+                className={cn(
+                  fieldClass,
+                  "mt-1.5 h-auto resize-none py-2 leading-relaxed",
+                  isReadOnly && "cursor-not-allowed opacity-70",
+                )}
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-fg-muted">
+                Area of Improvement
+              </label>
+              <textarea
+                rows={4}
+                value={areaOfImprovement}
+                onChange={(e) => onAreaOfImprovement(e.target.value)}
+                placeholder="Identify areas where the agent can improve…"
+                disabled={isReadOnly}
+                className={cn(
+                  fieldClass,
+                  "mt-1.5 h-auto resize-none py-2 leading-relaxed",
+                  isReadOnly && "cursor-not-allowed opacity-70",
+                )}
+              />
+            </div>
+          </div>
+
           {isReadOnly && (
             <p className="mt-3 inline-flex items-center gap-1 text-xs text-fg-subtle">
               <Lock className="h-3 w-3" />
@@ -1074,6 +1155,37 @@ export function NewAuditWizard({
                         </dt>
                         <dd className="mt-0.5 whitespace-pre-wrap text-sm text-fg">
                           {acptLevel3.trim()}
+                        </dd>
+                      </div>
+                    )}
+                  </dl>
+                </div>
+              )}
+
+              {/* Call notes summary — only shown when at least one is filled */}
+              {(callObservation.trim() || areaOfImprovement.trim()) && (
+                <div className="mt-4 rounded-md border border-border bg-bg-muted p-3">
+                  <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-fg-subtle">
+                    Call notes
+                  </p>
+                  <dl className="grid grid-cols-1 gap-3 text-sm">
+                    {callObservation.trim() && (
+                      <div>
+                        <dt className="text-[11px] font-medium uppercase tracking-wider text-fg-subtle">
+                          Call Observation
+                        </dt>
+                        <dd className="mt-0.5 whitespace-pre-wrap text-sm text-fg">
+                          {callObservation.trim()}
+                        </dd>
+                      </div>
+                    )}
+                    {areaOfImprovement.trim() && (
+                      <div>
+                        <dt className="text-[11px] font-medium uppercase tracking-wider text-fg-subtle">
+                          Area of Improvement
+                        </dt>
+                        <dd className="mt-0.5 whitespace-pre-wrap text-sm text-fg">
+                          {areaOfImprovement.trim()}
                         </dd>
                       </div>
                     )}

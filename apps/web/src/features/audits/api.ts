@@ -23,6 +23,10 @@ export interface UpdateAuditPayload {
   acptLevel2?: string | null;
   /** Free-text Level 3 observations. Null to clear. */
   acptLevel3?: string | null;
+  /** Supervisor's observation about the call. Null to clear. */
+  callObservation?: string | null;
+  /** Supervisor's improvement notes for the agent. Null to clear. */
+  areaOfImprovement?: string | null;
 }
 
 export interface SubmitAuditPayload {
@@ -39,6 +43,10 @@ export interface SubmitAuditPayload {
   acptLevel2?: string | null;
   /** Free-text Level 3 observations. Null to clear. */
   acptLevel3?: string | null;
+  /** Supervisor's observation about the call. Null to clear. */
+  callObservation?: string | null;
+  /** Supervisor's improvement notes for the agent. Null to clear. */
+  areaOfImprovement?: string | null;
 }
 
 export interface ListAuditParams {

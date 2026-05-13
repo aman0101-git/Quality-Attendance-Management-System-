@@ -396,6 +396,37 @@ export default function AuditDetailPage() {
         </AppCard>
       )}
 
+      {/* ------- Call notes (observation + area of improvement) ---------- */}
+      {(audit.callObservation || audit.areaOfImprovement) && (
+        <AppCard padding="md" className="mb-6">
+          <p className="mb-3 text-[11px] font-medium uppercase tracking-wider text-fg-subtle">
+            Call notes
+          </p>
+          <dl className="flex flex-col gap-4 text-sm">
+            {audit.callObservation && (
+              <div>
+                <dt className="text-[11px] font-medium uppercase tracking-wider text-fg-subtle">
+                  Call Observation
+                </dt>
+                <dd className="mt-0.5 whitespace-pre-wrap text-sm leading-relaxed text-fg-muted">
+                  {audit.callObservation}
+                </dd>
+              </div>
+            )}
+            {audit.areaOfImprovement && (
+              <div>
+                <dt className="text-[11px] font-medium uppercase tracking-wider text-fg-subtle">
+                  Area of Improvement
+                </dt>
+                <dd className="mt-0.5 whitespace-pre-wrap text-sm leading-relaxed text-fg-muted">
+                  {audit.areaOfImprovement}
+                </dd>
+              </div>
+            )}
+          </dl>
+        </AppCard>
+      )}
+
       {/* ------- Supervisor correction note (post-publish) -------------- */}
       {audit.supervisorCorrectionNote && (
         <AppCard padding="md" className="mb-6 border-warning/30">

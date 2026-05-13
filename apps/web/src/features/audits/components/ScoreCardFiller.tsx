@@ -20,15 +20,14 @@ export interface AnswerDraft {
 }
 
 export type AnswerDraftMap = Record<number, AnswerDraft>;
+/** @deprecated section-level remarks removed; kept for type compatibility during migration */
 export type SectionRemarkMap = Record<number, string>;
 
 interface ScoreCardFillerProps {
   sections: AuditSection[];
   answers: AnswerDraftMap;
-  sectionRemarks: SectionRemarkMap;
   onAnswer: (questionId: number, value: string | null) => void;
   onAnswerRemark: (questionId: number, remark: string) => void;
-  onSectionRemark: (sectionId: number, remark: string) => void;
   /** When true, all inputs are disabled — used for published audits. */
   readOnly?: boolean;
 }
@@ -52,10 +51,8 @@ const fieldClass = cn(
 export function ScoreCardFiller({
   sections,
   answers,
-  sectionRemarks,
   onAnswer,
   onAnswerRemark,
-  onSectionRemark,
   readOnly = false,
 }: ScoreCardFillerProps) {
   return (
@@ -65,11 +62,9 @@ export function ScoreCardFiller({
           key={section.id}
           section={section}
           answers={answers}
-          sectionRemark={sectionRemarks[section.id] ?? ""}
           readOnly={readOnly}
           onAnswer={onAnswer}
           onAnswerRemark={onAnswerRemark}
-          onSectionRemark={onSectionRemark}
         />
       ))}
     </div>
@@ -79,13 +74,11 @@ export function ScoreCardFiller({
 function SectionBlock(props: {
   section: AuditSection;
   answers: AnswerDraftMap;
-  sectionRemark: string;
   readOnly: boolean;
   onAnswer: (questionId: number, value: string | null) => void;
   onAnswerRemark: (questionId: number, remark: string) => void;
-  onSectionRemark: (sectionId: number, remark: string) => void;
 }) {
-  const { section, answers, sectionRemark, readOnly } = props;
+  const { section, answers, readOnly } = props;
 
   const answeredCount = useMemo(
     () =>
@@ -143,24 +136,6 @@ function SectionBlock(props: {
             onAnswerRemark={props.onAnswerRemark}
           />
         ))}
-      </div>
-
-      <div className="border-t border-border px-4 py-2.5">
-        <label className="text-[11px] font-medium uppercase tracking-wider text-fg-muted">
-          Section remark
-        </label>
-        <textarea
-          rows={2}
-          value={sectionRemark}
-          onChange={(e) => props.onSectionRemark(section.id, e.target.value)}
-          placeholder="Optional notes for this section…"
-          disabled={readOnly}
-          className={cn(
-            fieldClass,
-            "mt-1 h-auto resize-none py-2 leading-relaxed",
-            readOnly && "cursor-not-allowed opacity-70",
-          )}
-        />
       </div>
     </section>
   );
