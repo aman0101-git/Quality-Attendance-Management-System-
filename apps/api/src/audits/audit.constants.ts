@@ -10,8 +10,16 @@ export const AUDIT_CODE_PREFIX = "AUD";
 /** Length of the random suffix appended to `auditCode`. */
 export const AUDIT_CODE_SUFFIX_LENGTH = 4;
 
-/** Allowed `value` strings for YES_NO questions. */
-export const YES_NO_VALUES = ["yes", "no", "na"] as const;
+/**
+ * Allowed `value` strings for YES_NO questions.
+ *
+ * Phase 2 adds the explicit `fatal` answer. Before Phase 2, a fatal
+ * miss was inferred from `question.fatal === true` + a NO answer,
+ * which meant a routine NO could accidentally zero the entire audit.
+ * The fatal verdict is now answer-driven: it is triggered if and
+ * only if the supervisor picks the explicit FATAL option.
+ */
+export const YES_NO_VALUES = ["yes", "no", "na", "fatal"] as const;
 export type YesNoValue = (typeof YES_NO_VALUES)[number];
 
 /** Default rating scale for RATING questions. */
@@ -19,14 +27,18 @@ export const DEFAULT_RATING_SCALE = 5;
 
 /**
  * Score returned (0..1) for a YES_NO answer.
- *  - "yes" → full credit
- *  - "no"  → no credit
- *  - "na"  → ignored: question is treated as non-scoring for this audit
+ *  - "yes"   → full credit
+ *  - "no"    → no credit (DOES NOT zero the whole audit anymore)
+ *  - "na"    → ignored: question is treated as non-scoring for this audit
+ *  - "fatal" → no credit AND triggers the audit-wide fatal override
+ *              (final score forced to 0). Still counts in the
+ *              applicable denominator so the raw % is meaningful.
  */
 export const YES_NO_SCORE: Record<YesNoValue, number | null> = {
   yes: 1,
   no: 0,
   na: null,
+  fatal: 0,
 };
 
 /** Max length we allow for free-text answers. */

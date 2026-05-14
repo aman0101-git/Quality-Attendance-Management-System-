@@ -90,12 +90,13 @@ function SectionBlock(props: {
   );
 
   const total = section.questions.length;
+  // Phase 2 fatal detection — answer-driven. A section flips to fatal
+  // only when at least one question is explicitly answered FATAL.
   const sectionFatalHit = useMemo(
     () =>
       section.questions.some((q) => {
-        if (!q.fatal) return false;
         const v = answers[q.id]?.value ?? null;
-        return v !== null && v !== "" && v !== "yes";
+        return v === "fatal";
       }),
     [section.questions, answers],
   );
@@ -158,8 +159,13 @@ function QuestionRow({
   const remark = draft?.remark ?? "";
   const [remarkOpen, setRemarkOpen] = useState(remark.length > 0);
 
-  const fatalHit =
-    question.fatal && value !== "" && value !== "yes" && value !== null;
+  // Phase 2: fatal is now ANSWER-DRIVEN. The chip group has an explicit
+  // FATAL option — a plain NO is no longer treated as a fatal miss.
+  // The legacy `question.fatal` template attribute still tags the row
+  // with a "Fatal" pill so the supervisor knows the question can carry
+  // a fatal verdict, but only the explicit FATAL answer trips the
+  // audit-wide warning + zero override.
+  const fatalHit = value === "fatal";
 
   return (
     <div className="px-4 py-2">
@@ -264,32 +270,59 @@ function AnswerInput({
   const ro = readOnly ? "cursor-not-allowed opacity-70" : "";
 
   if (question.type === AuditQuestionType.YES_NO) {
+    // Phase 2: four-way YES / NO / N/A / FATAL.
+    //
+    //   YES   → green  (full credit)
+    //   NO    → red    (zero, no audit-wide effect)
+    //   N/A   → yellow (excluded from denominator)
+    //   FATAL → deep red, warning icon (forces final score to 0)
+    //
+    // FATAL gets a distinct destructive treatment so it can never be
+    // confused with NO at a glance — the visual weight signals "this
+    // call has a critical failure and the whole audit goes to zero".
     return (
       <div className="flex shrink-0 items-center gap-1">
-        {(["yes", "no", "na"] as const).map((opt) => {
+        {(["yes", "no", "na", "fatal"] as const).map((opt) => {
           const active = value === opt;
-          // Yes → green, No → red, N/A → yellow/warning
           const activeClass =
             opt === "yes"
               ? "border-success/40 bg-success/15 text-success"
               : opt === "no"
                 ? "border-danger/40 bg-danger/15 text-danger"
-                : "border-warning/40 bg-warning/15 text-warning";
+                : opt === "na"
+                  ? "border-warning/40 bg-warning/15 text-warning"
+                  : // FATAL — destructive treatment, slightly stronger than NO
+                    "border-danger/60 bg-danger text-white shadow-elev-1";
+          // FATAL inactive state nudges users away from clicking it
+          // accidentally by using a hairline outline + alarm icon.
+          const inactiveClass =
+            opt === "fatal"
+              ? "border-danger/30 bg-surface text-danger hover:bg-danger/10"
+              : "border-border bg-surface text-fg-muted hover:bg-bg-muted";
+          const label =
+            opt === "na" ? "N/A" : opt === "fatal" ? "FATAL" : opt;
           return (
             <button
               key={opt}
               type="button"
               disabled={readOnly}
               onClick={() => onChange(active ? null : opt)}
+              title={
+                opt === "fatal"
+                  ? "Fatal — final audit score is forced to 0"
+                  : undefined
+              }
               className={cn(
-                "inline-flex h-7 min-w-[42px] items-center justify-center rounded-md border px-2 text-[11px] font-semibold uppercase tracking-wide transition-colors",
-                active
-                  ? activeClass
-                  : "border-border bg-surface text-fg-muted hover:bg-bg-muted",
+                "inline-flex h-7 items-center justify-center gap-1 rounded-md border px-2 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+                opt === "fatal" ? "min-w-[56px]" : "min-w-[42px]",
+                active ? activeClass : inactiveClass,
                 ro,
               )}
             >
-              {opt === "na" ? "N/A" : opt}
+              {opt === "fatal" && (
+                <ShieldAlert className="h-3 w-3" aria-hidden="true" />
+              )}
+              {label}
             </button>
           );
         })}

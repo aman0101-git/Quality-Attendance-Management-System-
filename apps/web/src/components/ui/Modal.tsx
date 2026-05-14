@@ -13,13 +13,15 @@ interface ModalProps {
   /** Footer slot (e.g. action buttons) */
   footer?: ReactNode;
   /** Constrain width — defaults to a comfortable form width */
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
 }
 
 const sizeMap: Record<NonNullable<ModalProps["size"]>, string> = {
   sm: "max-w-sm",
   md: "max-w-md",
   lg: "max-w-2xl",
+  // xl reserved for drill-down tables that need to render full audit / agent rows.
+  xl: "max-w-5xl",
 };
 
 /**
