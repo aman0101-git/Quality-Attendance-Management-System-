@@ -4,9 +4,11 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
+  IsISO8601,
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
@@ -144,4 +146,26 @@ export class UpdateAuditDto {
   @IsString()
   @MaxLength(AUDIT_NOTE_MAX)
   areaOfImprovement?: string | null;
+
+  // -----------------------------------------------------------------------
+  //  Phase 1 — call metadata. Both are optional on autosave so the
+  //  wizard can omit them when the supervisor hasn't filled them in yet.
+  //  Sending an explicit `null` clears the column.
+  // -----------------------------------------------------------------------
+
+  /**
+   * ISO date/time string for when the audited call took place. The
+   * frontend always sends midnight UTC for date-only entries. The DTO
+   * accepts the field as nullable so it can be cleared.
+   */
+  @IsOptional()
+  @IsISO8601({}, { message: "Call date must be an ISO date or timestamp" })
+  callDate?: string | null;
+
+  /** Duration of the audited call in seconds. Capped at 24h defensively. */
+  @IsOptional()
+  @IsInt({ message: "Call duration must be an integer (seconds)" })
+  @Min(0)
+  @Max(60 * 60 * 24)
+  callDuration?: number | null;
 }

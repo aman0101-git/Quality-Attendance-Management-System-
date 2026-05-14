@@ -17,7 +17,13 @@ import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SearchInput } from "@/components/ui/SearchInput";
 import Modal from "@/components/ui/Modal";
-import { cn, formatDateTime, formatAuditScore, qualityLabel } from "@/lib/utils";
+import {
+  cn,
+  formatAuditScore,
+  formatDateTime,
+  formatDurationSeconds,
+  qualityLabel,
+} from "@/lib/utils";
 import {
   discardAudit,
   listAudits,
@@ -166,14 +172,33 @@ export default function AuditsPage() {
       {
         key: "code",
         header: "Audit",
-        cell: (row) => (
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-fg">{row.auditCode}</span>
-            <span className="text-xs text-fg-subtle">
-              {row.callReference}
-            </span>
-          </div>
-        ),
+        cell: (row) => {
+          // Date/duration are Phase 1 additions; both null on legacy
+          // rows. Surface them subtly under the recording id so the
+          // list stays compact but operational metadata is visible at
+          // a glance.
+          const dateLabel =
+            row.callDate
+              ? new Date(row.callDate).toLocaleDateString()
+              : null;
+          const durationLabel = formatDurationSeconds(row.callDuration ?? null);
+          return (
+            <div className="flex flex-col">
+              <span className="text-sm font-medium text-fg">{row.auditCode}</span>
+              <span className="text-xs text-fg-subtle">
+                {row.callReference}
+                {(dateLabel || durationLabel) && (
+                  <>
+                    {" · "}
+                    {dateLabel ?? ""}
+                    {dateLabel && durationLabel ? " · " : ""}
+                    {durationLabel}
+                  </>
+                )}
+              </span>
+            </div>
+          );
+        },
       },
       {
         key: "agent",

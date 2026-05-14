@@ -5,6 +5,10 @@ export interface CreateAuditPayload {
   agentId: string;
   projectId: number;
   callReference: string;
+  /** Optional — ISO date string (YYYY-MM-DD) or full ISO timestamp. */
+  callDate?: string | null;
+  /** Optional — duration of the call in seconds. */
+  callDuration?: number | null;
 }
 
 export interface UpdateAuditPayload {
@@ -27,6 +31,10 @@ export interface UpdateAuditPayload {
   callObservation?: string | null;
   /** Supervisor's improvement notes for the agent. Null to clear. */
   areaOfImprovement?: string | null;
+  /** Date the audited call took place. ISO date (YYYY-MM-DD) or full timestamp. Null to clear. */
+  callDate?: string | null;
+  /** Call duration in seconds. Null to clear. */
+  callDuration?: number | null;
 }
 
 export interface SubmitAuditPayload {
@@ -47,6 +55,10 @@ export interface SubmitAuditPayload {
   callObservation?: string | null;
   /** Supervisor's improvement notes for the agent. Null to clear. */
   areaOfImprovement?: string | null;
+  /** Date the audited call took place. ISO date (YYYY-MM-DD) or full timestamp. Null to clear. */
+  callDate?: string | null;
+  /** Call duration in seconds. Null to clear. */
+  callDuration?: number | null;
 }
 
 export interface ListAuditParams {

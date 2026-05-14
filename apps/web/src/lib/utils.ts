@@ -189,3 +189,25 @@ export function formatAuditScore(
   }
   return `${finalScore.toFixed(1)}%`;
 }
+
+/**
+ * Render an integer second count as a compact HH:MM:SS / MM:SS string.
+ * Used everywhere the Phase 1 `callDuration` field is displayed —
+ * supervisor list, agent list, agent detail, wizard review — so the
+ * format stays consistent across the app. Returns the empty string for
+ * null / negative / non-finite inputs so callers can do `|| "—"`.
+ */
+export function formatDurationSeconds(
+  seconds: number | null | undefined,
+): string {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) {
+    return "";
+  }
+  const s = Math.max(0, Math.floor(seconds));
+  const hh = Math.floor(s / 3600);
+  const mm = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  if (hh > 0) return `${hh}:${pad(mm)}:${pad(ss)}`;
+  return `${mm}:${pad(ss)}`;
+}

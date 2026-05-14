@@ -234,7 +234,20 @@ model Audit {
   scorecardSnapshot   Json?   @map("scorecard_snapshot")
 
   /// Reference to the underlying call (recording id, ticket id, …).
+  /// Note: this is NOT a unique field — the same recording id may be
+  /// audited multiple times (e.g. re-audited by a different supervisor
+  /// or revisited later). Uniqueness was intentionally removed in the
+  /// Phase 1 stability migration so duplicates are permitted.
   callReference String  @map("call_reference") @db.VarChar(120)
+
+  /// Date the audited call took place. Optional — populated by the
+  /// supervisor in the audit wizard. Distinct from `createdAt` which
+  /// tracks when the audit row itself was created.
+  callDate     DateTime? @map("call_date")
+
+  /// Duration of the audited call in seconds. Optional. Stored as an
+  /// integer so the UI can format it freely (e.g. "12m 30s").
+  callDuration Int?      @map("call_duration")
 
   /// Server-calculated, persisted on every save.
   /// totalScore      = sum of weights for passing (YES) questions.
@@ -333,6 +346,10 @@ model Audit {
   @@index([createdAt])
   @@index([publishedAt])
   @@index([deletedAt])
+  /// callReference is heavily searched (supervisor filters, agent lookups)
+  /// — keep an index now that the column is no longer unique.
+  @@index([callReference])
+  @@index([callDate])
   @@map("audits")
 }
 

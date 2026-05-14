@@ -89,6 +89,8 @@ export class AgentAuditsService {
       acptCategory: r.acptCategory ?? null,
       acptLevel2: r.acptLevel2 ?? null,
       acptLevel3: r.acptLevel3 ?? null,
+      callDate: r.callDate ?? null,
+      callDuration: r.callDuration ?? null,
     }));
   }
 
