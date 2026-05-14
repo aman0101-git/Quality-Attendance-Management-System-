@@ -32,6 +32,15 @@ import {
   isWithinRange,
   type DateRangePreset,
 } from "@/lib/utils";
+import { DrillDownModal } from "@/features/reports/components/DrillDownModal";
+
+/** Drill-down identifier for the supervisor dashboard KPIs. */
+type DashboardDrill =
+  | "all"
+  | "inProgress"
+  | "awaitingPublish"
+  | "published"
+  | null;
 
 function scoreToneClass(value: number | null, fatal: boolean): string {
   if (fatal) return "text-danger";
@@ -54,6 +63,7 @@ export default function SupervisorDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [range, setRange] = useState<DateRangePreset>("all");
+  const [drill, setDrill] = useState<DashboardDrill>(null);
 
   const fetchAudits = useCallback(async () => {
     setLoading(true);
@@ -163,40 +173,96 @@ export default function SupervisorDashboard() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Total audits"
-          value={loading ? "—" : stats.total}
-          icon={ClipboardList}
-          loading={loading}
-        />
-        <StatCard
-          label="In progress"
-          value={loading ? "—" : stats.inProgress}
-          icon={TimerReset}
-          description="Drafts + ongoing"
-          loading={loading}
-        />
-        <StatCard
-          label="Awaiting publish"
-          value={loading ? "—" : stats.awaitingPublish}
-          icon={ClipboardCheck}
-          description="Submitted, not yet sent to agent"
-          loading={loading}
-        />
-        <StatCard
-          label="Avg score"
-          value={
-            loading
-              ? "—"
-              : stats.averageScore === null
+        <KpiButton
+          disabled={loading || stats.total === 0}
+          onClick={() => setDrill("all")}
+        >
+          <StatCard
+            label="Total audits"
+            value={loading ? "—" : stats.total}
+            icon={ClipboardList}
+            loading={loading}
+            description={stats.total > 0 ? "Click to drill down" : undefined}
+          />
+        </KpiButton>
+        <KpiButton
+          disabled={loading || stats.inProgress === 0}
+          onClick={() => setDrill("inProgress")}
+        >
+          <StatCard
+            label="In progress"
+            value={loading ? "—" : stats.inProgress}
+            icon={TimerReset}
+            description="Drafts + ongoing"
+            loading={loading}
+          />
+        </KpiButton>
+        <KpiButton
+          disabled={loading || stats.awaitingPublish === 0}
+          onClick={() => setDrill("awaitingPublish")}
+        >
+          <StatCard
+            label="Awaiting publish"
+            value={loading ? "—" : stats.awaitingPublish}
+            icon={ClipboardCheck}
+            description="Submitted, not yet sent to agent"
+            loading={loading}
+          />
+        </KpiButton>
+        <KpiButton
+          disabled={loading || stats.published === 0}
+          onClick={() => setDrill("published")}
+        >
+          <StatCard
+            label="Avg score"
+            value={
+              loading
                 ? "—"
-                : `${stats.averageScore.toFixed(1)}%`
-          }
-          icon={Star}
-          description={`across ${stats.published} published`}
-          loading={loading}
-        />
+                : stats.averageScore === null
+                  ? "—"
+                  : `${stats.averageScore.toFixed(1)}%`
+            }
+            icon={Star}
+            description={`across ${stats.published} published`}
+            loading={loading}
+          />
+        </KpiButton>
       </div>
+
+      {/* Drill-down modal — opens whichever slice the supervisor clicked.
+          Filtering happens locally over the already supervisor-scoped
+          `filtered` array so permissions are preserved by construction. */}
+      <DrillDownModal
+        variant="audits"
+        open={drill !== null}
+        onOpenChange={(o) => !o && setDrill(null)}
+        title={
+          drill === "inProgress"
+            ? "In progress audits"
+            : drill === "awaitingPublish"
+              ? "Submitted (awaiting publish)"
+              : drill === "published"
+                ? "Published audits"
+                : "Audits in range"
+        }
+        audits={
+          drill === "inProgress"
+            ? filtered.filter(
+                (a) =>
+                  a.status === AuditStatus.DRAFT ||
+                  a.status === AuditStatus.IN_PROGRESS,
+              )
+            : drill === "awaitingPublish"
+              ? filtered.filter((a) => a.status === AuditStatus.SUBMITTED)
+              : drill === "published"
+                ? filtered.filter(
+                    (a) =>
+                      a.status === AuditStatus.PUBLISHED ||
+                      a.status === AuditStatus.REVIEWED,
+                  )
+                : filtered
+        }
+      />
 
       <div className="mt-5 grid gap-4 lg:grid-cols-3">
         <AppCard
@@ -338,6 +404,35 @@ export default function SupervisorDashboard() {
         </AppCard>
       </div>
     </PageContainer>
+  );
+}
+
+/**
+ * Wraps a StatCard so the whole tile becomes a click target for a
+ * drill-down. When `disabled` (loading or zero matching audits) it
+ * falls back to a plain wrapper so the user doesn't get lured into
+ * an empty modal.
+ */
+function KpiButton({
+  children,
+  onClick,
+  disabled,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  if (disabled) {
+    return <div>{children}</div>;
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="block w-full text-left transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+    >
+      {children}
+    </button>
   );
 }
 

@@ -49,30 +49,35 @@ function scoreToneClass(value: number | null, fatal: boolean): string {
 }
 
 /**
- * Map a question's recorded answer to a tri-state pass/fail/NA result
- * for the agent-side breakdown.
+ * Phase 2 — map a recorded answer to a four-state outcome on the
+ * agent breakdown screen.
  *
- *   - YES → Pass  (normalizedScore === 1)
- *   - NO  → Fail  (normalizedScore === 0)
- *   - N/A → N/A   (value === "na" OR normalizedScore === null)
- *   - unanswered → N/A (no `answer` row, or blank value)
+ *   "pass"   → YES         (normalizedScore === 1)
+ *   "fail"   → NO          (normalizedScore === 0, not fatal)
+ *   "na"     → N/A         (value === "na" or normalizedScore null)
+ *   "fatal"  → FATAL miss  (value === "fatal" or persisted fatalHit)
+ *   null     → unanswered  (no answer row at all)
  *
- * This is presentation-only — it does NOT change the scoring engine.
- * Before this fix, N/A answers fell into the "passed === false" branch
- * because `normalizedScore === 1` is false when normalizedScore is
- * null, which incorrectly rendered them as "Fail" on the agent view.
+ * Presentation-only — does not change the scoring engine.
  */
-function isQuestionPassed(q: AgentAuditQuestion): boolean | null {
-  if (!q.answer || q.answer.value === null || q.answer.value === "") {
+type QuestionOutcome = "pass" | "fail" | "na" | "fatal" | null;
+
+function questionOutcome(q: AgentAuditQuestion): QuestionOutcome {
+  const ans = q.answer;
+  if (!ans || ans.value === null || ans.value === "") {
     return null;
   }
-  // YES_NO N/A answers are stored as the literal "na" string and the
-  // server records normalizedScore = null (the score engine treats
-  // them as non-scoring). Either signal is sufficient to render N/A.
-  if (q.answer.value === "na" || q.answer.normalizedScore === null) {
-    return null;
+  const v = String(ans.value).toLowerCase();
+
+  // FATAL takes precedence — the audit-wide score has been zeroed and
+  // the agent should see exactly which question caused it.
+  if (v === "fatal" || ans.fatalHit) {
+    return "fatal";
   }
-  return q.answer.normalizedScore === 1;
+  if (v === "na" || ans.normalizedScore === null) {
+    return "na";
+  }
+  return ans.normalizedScore === 1 ? "pass" : "fail";
 }
 
 export default function AuditDetailPage() {
@@ -643,8 +648,7 @@ function SectionBlock({ section }: { section: AgentAuditSection }) {
   const earned = useMemo(
     () =>
       section.questions.reduce(
-        (acc, q) =>
-          acc + (q.answer && q.answer.normalizedScore === 1 ? q.weight : 0),
+        (acc, q) => acc + (questionOutcome(q) === "pass" ? q.weight : 0),
         0,
       ),
     [section.questions],
@@ -697,10 +701,8 @@ function SectionBlock({ section }: { section: AgentAuditSection }) {
 }
 
 function QuestionRow({ question }: { question: AgentAuditQuestion }) {
-  const passed = isQuestionPassed(question);
-  const earned =
-    passed === true ? question.weight : 0;
-  const fatalHit = question.answer?.fatalHit ?? false;
+  const outcome = questionOutcome(question);
+  const earned = outcome === "pass" ? question.weight : 0;
 
   return (
     <div className="rounded-md border border-border bg-bg-elevated p-3">
@@ -712,32 +714,36 @@ function QuestionRow({ question }: { question: AgentAuditQuestion }) {
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          {question.fatal && (
+          {question.fatal && outcome !== "fatal" && (
             <span className="inline-flex items-center gap-1 rounded-full border border-danger/30 bg-danger/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-danger">
               <ShieldAlert className="h-3 w-3" />
-              Fatal
+              Fatal-capable
             </span>
           )}
-          {passed === true && (
+          {outcome === "pass" && (
             <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/15 px-2 py-0.5 text-[11px] font-medium text-success">
               <CheckCircle2 className="h-3 w-3" />
               Pass
             </span>
           )}
-          {passed === false && (
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
-                fatalHit
-                  ? "border-danger/40 bg-danger/15 text-danger"
-                  : "border-warning/40 bg-warning/15 text-warning",
-              )}
-            >
+          {outcome === "fail" && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning/15 px-2 py-0.5 text-[11px] font-medium text-warning">
               <XCircle className="h-3 w-3" />
               Fail
             </span>
           )}
-          {passed === null && (
+          {outcome === "fatal" && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-danger/60 bg-danger px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-white">
+              <ShieldAlert className="h-3 w-3" />
+              Fatal
+            </span>
+          )}
+          {outcome === "na" && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-border bg-bg-muted px-2 py-0.5 text-[11px] font-medium text-fg-muted">
+              N/A
+            </span>
+          )}
+          {outcome === null && (
             <span className="inline-flex items-center gap-1 rounded-full border border-border bg-bg-muted px-2 py-0.5 text-[11px] font-medium text-fg-muted">
               N/A
             </span>
@@ -754,12 +760,17 @@ function QuestionRow({ question }: { question: AgentAuditQuestion }) {
           <span
             className={cn(
               "tabular-nums",
-              passed === true ? "text-success" : "text-fg-muted",
+              outcome === "pass" ? "text-success" : "text-fg-muted",
             )}
           >
             {earned}
           </span>
         </span>
+        {outcome === "fatal" && (
+          <span className="text-danger">
+            Fatal answer — final audit score forced to 0.
+          </span>
+        )}
       </div>
 
       {question.answer?.remark && (

@@ -31,6 +31,15 @@ import {
   isWithinRange,
   type DateRangePreset,
 } from "@/lib/utils";
+import { DrillDownModal } from "@/features/reports/components/DrillDownModal";
+
+/** Drill-down identifier for the admin dashboard KPIs. */
+type DashboardDrill =
+  | "all"
+  | "submitted"
+  | "published"
+  | "reviewed"
+  | null;
 
 /**
  * Admin dashboard — workspace-wide directory + audit KPIs. The time
@@ -45,6 +54,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [range, setRange] = useState<DateRangePreset>("all");
+  const [drill, setDrill] = useState<DashboardDrill>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -149,42 +159,101 @@ export default function AdminDashboard() {
         </p>
       </div>
 
-      {/* Audit KPIs — driven by the time filter */}
+      {/* Audit KPIs — driven by the time filter. Every tile drills
+          down to the records behind the number; the modal lists are
+          workspace-wide (admin scope is enforced server-side by
+          `listAudits`). */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Audits in range"
-          value={loading ? "—" : auditStats.total}
-          icon={ClipboardList}
-          loading={loading}
-        />
-        <StatCard
-          label="Submitted"
-          value={loading ? "—" : auditStats.submitted}
-          icon={ClipboardCheck}
-          description="Awaiting publish"
-          loading={loading}
-        />
-        <StatCard
-          label="Published"
-          value={loading ? "—" : auditStats.published}
-          icon={ClipboardCheck}
-          description={`${auditStats.reviewed} reviewed`}
-          loading={loading}
-        />
-        <StatCard
-          label="Avg score"
-          value={
-            loading
-              ? "—"
-              : auditStats.avgScore === null
+        <KpiButton
+          disabled={loading || auditStats.total === 0}
+          onClick={() => setDrill("all")}
+        >
+          <StatCard
+            label="Audits in range"
+            value={loading ? "—" : auditStats.total}
+            icon={ClipboardList}
+            loading={loading}
+            description={
+              auditStats.total > 0 ? "Click to drill down" : undefined
+            }
+          />
+        </KpiButton>
+        <KpiButton
+          disabled={loading || auditStats.submitted === 0}
+          onClick={() => setDrill("submitted")}
+        >
+          <StatCard
+            label="Submitted"
+            value={loading ? "—" : auditStats.submitted}
+            icon={ClipboardCheck}
+            description="Awaiting publish"
+            loading={loading}
+          />
+        </KpiButton>
+        <KpiButton
+          disabled={loading || auditStats.published === 0}
+          onClick={() => setDrill("published")}
+        >
+          <StatCard
+            label="Published"
+            value={loading ? "—" : auditStats.published}
+            icon={ClipboardCheck}
+            description={`${auditStats.reviewed} reviewed`}
+            loading={loading}
+          />
+        </KpiButton>
+        <KpiButton
+          disabled={loading || auditStats.published === 0}
+          onClick={() => setDrill("published")}
+        >
+          <StatCard
+            label="Avg score"
+            value={
+              loading
                 ? "—"
-                : `${auditStats.avgScore.toFixed(1)}%`
-          }
-          icon={Star}
-          description={`across ${auditStats.published} published`}
-          loading={loading}
-        />
+                : auditStats.avgScore === null
+                  ? "—"
+                  : `${auditStats.avgScore.toFixed(1)}%`
+            }
+            icon={Star}
+            description={`across ${auditStats.published} published`}
+            loading={loading}
+          />
+        </KpiButton>
       </div>
+
+      {/* Drill-down modal — picks a slice from the already admin-
+          scoped `filteredAudits`. Admin sees workspace-wide data,
+          which matches the existing audit list permission rules. */}
+      <DrillDownModal
+        variant="audits"
+        open={drill !== null}
+        onOpenChange={(o) => !o && setDrill(null)}
+        title={
+          drill === "submitted"
+            ? "Submitted (awaiting publish)"
+            : drill === "published"
+              ? "Published audits"
+              : drill === "reviewed"
+                ? "Reviewed by agent"
+                : "Audits in range"
+        }
+        audits={
+          drill === "submitted"
+            ? filteredAudits.filter((a) => a.status === AuditStatus.SUBMITTED)
+            : drill === "published"
+              ? filteredAudits.filter(
+                  (a) =>
+                    a.status === AuditStatus.PUBLISHED ||
+                    a.status === AuditStatus.REVIEWED,
+                )
+              : drill === "reviewed"
+                ? filteredAudits.filter(
+                    (a) => a.status === AuditStatus.REVIEWED,
+                  )
+                : filteredAudits
+        }
+      />
 
       {/* Workspace directory snapshot */}
       <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -345,5 +414,34 @@ export default function AdminDashboard() {
         onCreated={() => void fetchAll()}
       />
     </PageContainer>
+  );
+}
+
+/**
+ * Wraps a StatCard so the whole tile becomes a click target for a
+ * drill-down. When `disabled` (loading or zero matching audits) the
+ * wrapper degrades to a plain div so users don't get lured into an
+ * empty modal.
+ */
+function KpiButton({
+  children,
+  onClick,
+  disabled,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  if (disabled) {
+    return <div>{children}</div>;
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="block w-full text-left transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+    >
+      {children}
+    </button>
   );
 }

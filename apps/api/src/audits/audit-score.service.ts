@@ -115,9 +115,20 @@ export class AuditScoreService {
 
         const passed = isAnswered && isQuestionPassed(q, value);
         const earned = passed ? q.weight : 0;
-        const isFatalMiss = q.fatal && isAnswered && !passed;
 
-        if (isFatalMiss) {
+        // Phase 2: fatal is now ANSWER-DRIVEN.
+        //
+        // A question triggers a fatal miss ONLY when the supervisor
+        // explicitly picked the FATAL chip. A plain NO is just a zero
+        // — it no longer flips the audit-wide override. The legacy
+        // `question.fatal` template flag still controls which
+        // questions are tagged as "fatal-capable" in the UI (a `Fatal`
+        // pill on the question row, distinct chip ordering, etc.) but
+        // it is no longer consulted here; the verdict is purely a
+        // function of the answer string.
+        const isFatalAnswer = isAnswered && isFatalValue(q, value);
+
+        if (isFatalAnswer) {
           fatalTriggered = true;
           sectionFatal = true;
         }
@@ -128,7 +139,7 @@ export class AuditScoreService {
         scoredAnswers.push({
           questionId: q.id,
           normalizedScore: isAnswered ? (passed ? 1 : 0) : null,
-          fatalHit: isFatalMiss,
+          fatalHit: isFatalAnswer,
           earnedPoints: earned,
           isNA: false,
         });
@@ -196,6 +207,21 @@ function isQuestionNA(
   return false;
 }
 
+/**
+ * Phase 2 helper. The fatal verdict is now driven by an explicit
+ * `fatal` answer on a YES_NO question. Returns false for any other
+ * question type — fatal is not a meaningful answer for ratings or
+ * multiple-choice values, only for the YES/NO/N/A/FATAL chip group.
+ */
+function isFatalValue(
+  question: ScoreEngineQuestion,
+  rawValue: string | null,
+): boolean {
+  if (!rawValue) return false;
+  if (question.type !== AuditQuestionType.YES_NO) return false;
+  return rawValue.toLowerCase() === "fatal";
+}
+
 function isQuestionPassed(
   question: ScoreEngineQuestion,
   rawValue: string | null,
@@ -207,6 +233,7 @@ function isQuestionPassed(
   switch (question.type) {
     case AuditQuestionType.YES_NO: {
       const v = rawValue.toLowerCase() as YesNoValue | string;
+      // Only YES is a pass. NO / N/A / FATAL never earn credit.
       return v === "yes";
     }
 

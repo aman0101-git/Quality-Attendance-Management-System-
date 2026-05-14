@@ -50,10 +50,12 @@ interface AuditPreview {
  * Mirror of the backend's `AuditScoreService.computeAudit` — kept in lockstep
  * so the on-screen number always matches what the server will persist.
  *
- *   YES answer → earns weight, counts in denominator
- *   NO  answer → earns 0,      counts in denominator
- *   N/A answer → earns 0,      EXCLUDED from denominator
- *   any fatal that did not pass (and is not N/A) → final forced to 0
+ *   YES   answer → earns weight, counts in denominator
+ *   NO    answer → earns 0,      counts in denominator
+ *   N/A   answer → earns 0,      EXCLUDED from denominator
+ *   FATAL answer → earns 0,      counts in denominator, AND forces
+ *                  the audit's final score to 0 (Phase 2 — fatal is
+ *                  now answer-driven, NO no longer zeros the audit)
  */
 function previewScore(audit: AuditDetail, answers: AnswerDraftMap): AuditPreview {
   let totalEarned = 0;
@@ -97,11 +99,11 @@ function previewScore(audit: AuditDetail, answers: AnswerDraftMap): AuditPreview
       const passed = isAnswered && isPass(q, value);
       const earned = passed ? q.weight : 0;
 
-      // Fatal flag triggers as soon as a fatal question has an
-      // *answered*, non-N/A, non-pass value. Unanswered fatals do not
-      // flip the flag yet — they fail at submission, not live preview.
-      const fatalMiss = q.fatal && isAnswered && !passed;
-      if (fatalMiss) {
+      // Phase 2 fatal rule (answer-driven): the audit goes fatal only
+      // when the supervisor explicitly picks the FATAL chip. A plain
+      // NO is just a zero — it no longer flips the audit-wide override.
+      const fatalAnswer = isAnswered && isFatal(q, value);
+      if (fatalAnswer) {
         fatalTriggered = true;
         sectionFatal = true;
       }
@@ -164,6 +166,16 @@ function previewScore(audit: AuditDetail, answers: AnswerDraftMap): AuditPreview
 function isNA(q: AuditQuestion, raw: string | null): boolean {
   if (!raw) return false;
   return q.type === AuditQuestionType.YES_NO && raw.toLowerCase() === "na";
+}
+
+/**
+ * Phase 2 — true when a YES_NO question was answered FATAL.
+ * Fatal is meaningful only on YES_NO questions; rating / MC / free-text
+ * answers never flip the audit-wide fatal flag.
+ */
+function isFatal(q: AuditQuestion, raw: string | null): boolean {
+  if (!raw) return false;
+  return q.type === AuditQuestionType.YES_NO && raw.toLowerCase() === "fatal";
 }
 
 function isPass(q: AuditQuestion, raw: string | null): boolean {
