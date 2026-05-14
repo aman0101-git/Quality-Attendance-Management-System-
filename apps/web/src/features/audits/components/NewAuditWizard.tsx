@@ -13,10 +13,11 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { AxiosError } from "axios";
-import { cn } from "@/lib/utils";
+import { cn, formatDurationSeconds } from "@/lib/utils";
 import { AppCard } from "@/components/ui/AppCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import Modal from "@/components/ui/Modal";
+import { SearchInput } from "@/components/ui/SearchInput";
 import {
   listAgents,
   type AgentUser,
@@ -36,6 +37,7 @@ import {
   setCorrectionNote,
   submitAudit,
   updateAudit,
+  type UpdateAuditPayload,
 } from "../api";
 import {
   AUDIT_IMMUTABLE_STATUSES,
@@ -88,6 +90,10 @@ export function NewAuditWizard({
   // Wizard state
   const [step, setStep] = useState<WizardStepId>("agent");
   const [agentId, setAgentId] = useState<string | null>(null);
+  /** Free-text filter for the agent selection step. Case-insensitive,
+   *  matches against name AND @username so supervisors can pivot on
+   *  whichever they remember. Resets when the wizard re-opens. */
+  const [agentSearch, setAgentSearch] = useState("");
   const [groupName, setGroupName] = useState<string | null>(null);
   const [projectId, setProjectId] = useState<number | null>(null);
   const [callReference, setCallReference] = useState("");
@@ -128,14 +134,55 @@ export function NewAuditWizard({
   const [callObservation, setCallObservation] = useState("");
   const [areaOfImprovement, setAreaOfImprovement] = useState("");
 
+  // Phase 1 addition: call date + duration. Both optional. `callDate` is
+  // a YYYY-MM-DD string (matching the native date input); `callDuration`
+  // is a free-text "MM:SS" or "M:SS" / "Hh Mm Ss" entry that's parsed to
+  // an integer number of seconds at autosave / submit time.
+  const [callDate, setCallDate] = useState<string>("");
+  const [callDuration, setCallDuration] = useState<string>("");
+
+  // Refs that always mirror the latest local draft. The autosave flush
+  // uses these to build the payload so a stale callback closure (e.g.
+  // a debounce timer scheduled before the most recent keystroke) can
+  // never persist out-of-date values. The refs are updated synchronously
+  // inside every change handler — never via useEffect — so by the time
+  // a flush runs the refs are authoritative.
+  const answersRef = useRef<AnswerDraftMap>({});
+  const sectionRemarksRef = useRef<SectionRemarkMap>({});
+  const overallCommentRef = useRef<string>("");
+  const acptCategoryRef = useRef<string | null>(null);
+  const acptLevel2Ref = useRef<string>("");
+  const acptLevel3Ref = useRef<string>("");
+  const callObservationRef = useRef<string>("");
+  const areaOfImprovementRef = useRef<string>("");
+  const callDateRef = useRef<string>("");
+  const callDurationRef = useRef<string>("");
+
   const autosaveTimer = useRef<number | null>(null);
+  /**
+   * In-flight flush bookkeeping. We snapshot the dirty set at the start
+   * of every flush and optimistically clear it before the network call
+   * so concurrent typing can re-mark slots without losing the new
+   * values. If the request fails we re-add the snapshot entries.
+   */
   const dirtyRef = useRef<{
     answerIds: Set<number>;
     sectionIds: Set<number>;
     overallChanged: boolean;
     acptChanged: boolean;
     notesChanged: boolean;
-  }>({ answerIds: new Set(), sectionIds: new Set(), overallChanged: false, acptChanged: false, notesChanged: false });
+    /** Call date / duration share a single dirty flag (they're saved together). */
+    callMetaChanged: boolean;
+  }>({
+    answerIds: new Set(),
+    sectionIds: new Set(),
+    overallChanged: false,
+    acptChanged: false,
+    notesChanged: false,
+    callMetaChanged: false,
+  });
+  /** Set to true while a flush is awaiting a response. */
+  const flushInFlight = useRef<boolean>(false);
 
   // ------------------------------------------------------------
   //  Initial data loads
@@ -210,6 +257,18 @@ export function NewAuditWizard({
     setCallObservation(detail.callObservation ?? "");
     setAreaOfImprovement(detail.areaOfImprovement ?? "");
 
+    // Call date / duration — null on legacy audits.  Convert the ISO
+    // timestamp the API returns into the YYYY-MM-DD shape the native
+    // date input expects.  Duration is rendered as MM:SS (or HH:MM:SS
+    // when it overflows an hour).
+    const dateRaw = detail.callDate ?? null;
+    const dateStr =
+      typeof dateRaw === "string" && dateRaw.length >= 10
+        ? dateRaw.slice(0, 10)
+        : "";
+    setCallDate(dateStr);
+    setCallDuration(formatDurationSeconds(detail.callDuration ?? null));
+
     const nextAnswers: AnswerDraftMap = {};
     const nextRemarks: SectionRemarkMap = {};
     for (const section of detail.sections) {
@@ -223,6 +282,32 @@ export function NewAuditWizard({
     }
     setAnswers(nextAnswers);
     setSectionRemarks(nextRemarks);
+
+    // Reset all of the bookkeeping refs so a freshly-rehydrated draft
+    // is treated as clean. Any in-flight autosave timer is cancelled
+    // because the user just navigated into the audit; we don't want to
+    // replay a pre-resume edit set against the newly loaded state.
+    answersRef.current = nextAnswers;
+    sectionRemarksRef.current = nextRemarks;
+    overallCommentRef.current = detail.overallComment ?? "";
+    acptCategoryRef.current = detail.acptCategory ?? null;
+    acptLevel2Ref.current = detail.acptLevel2 ?? "";
+    acptLevel3Ref.current = detail.acptLevel3 ?? "";
+    callObservationRef.current = detail.callObservation ?? "";
+    areaOfImprovementRef.current = detail.areaOfImprovement ?? "";
+    callDateRef.current = dateStr;
+    callDurationRef.current = formatDurationSeconds(detail.callDuration ?? null);
+
+    if (autosaveTimer.current) {
+      window.clearTimeout(autosaveTimer.current);
+      autosaveTimer.current = null;
+    }
+    dirtyRef.current.answerIds = new Set();
+    dirtyRef.current.sectionIds = new Set();
+    dirtyRef.current.overallChanged = false;
+    dirtyRef.current.acptChanged = false;
+    dirtyRef.current.notesChanged = false;
+    dirtyRef.current.callMetaChanged = false;
   }, []);
 
   // ------------------------------------------------------------
@@ -276,6 +361,10 @@ export function NewAuditWizard({
           agentId,
           projectId,
           callReference: callReference.trim(),
+          // Optional — only send when the supervisor entered them on
+          // the call step so the server can persist immediately.
+          callDate: normalizeCallDate(callDate),
+          callDuration: parseDurationToSeconds(callDuration),
         });
         ingestDetail(created);
         toast.success(`Draft ${created.auditCode} saved`);
@@ -300,6 +389,8 @@ export function NewAuditWizard({
     agentId,
     projectId,
     callReference,
+    callDate,
+    callDuration,
     ingestDetail,
     onSavedDraft,
   ]);
@@ -347,74 +438,160 @@ export function NewAuditWizard({
   //  Autosave
   // ------------------------------------------------------------
 
-  const flushAutosave = useCallback(async () => {
-    if (!audit) return;
+  /**
+   * Persist any dirty parts of the local draft to the server.
+   *
+   * The flow is intentionally race-safe so rapid edits never get lost:
+   *
+   *   1. Snapshot the dirty set (what we're about to persist) and the
+   *      authoritative values from the refs (latest local state, even
+   *      if a stale React closure is still in scope).
+   *   2. Optimistically clear the dirty bookkeeping BEFORE awaiting
+   *      the network request — that way concurrent typing during the
+   *      request marks new dirty entries without us blowing them away
+   *      in the success handler.
+   *   3. On success: merge only audit-level metadata (status, scores,
+   *      timestamps) back into local audit state. We never overwrite
+   *      the user's draft `answers` / `sectionRemarks` / textarea
+   *      contents — they may have moved on while the request was in
+   *      flight, and the server already has the snapshot we sent.
+   *   4. On failure: re-mark the snapshot entries dirty so they retry
+   *      on the next debounce window. Newer edits remain dirty too.
+   *
+   * Returns false on error so callers (e.g. `handleSubmit`) can decide
+   * whether to continue.
+   */
+  const flushAutosave = useCallback(async (): Promise<boolean> => {
+    if (!audit) return true;
     const dirty = dirtyRef.current;
     if (
       dirty.answerIds.size === 0 &&
       dirty.sectionIds.size === 0 &&
       !dirty.overallChanged &&
       !dirty.acptChanged &&
-      !dirty.notesChanged
+      !dirty.notesChanged &&
+      !dirty.callMetaChanged
     ) {
-      return;
+      return true;
+    }
+    // Don't run two flushes in parallel. The autosave timer respects
+    // this; an explicit `Save now` press will await the in-flight
+    // flush instead of stacking a second concurrent request.
+    if (flushInFlight.current) {
+      return true;
     }
 
-    const payload = {
-      ...(dirty.answerIds.size
-        ? {
-            answers: [...dirty.answerIds].map((qid) => ({
-              questionId: qid,
-              value: answers[qid]?.value ?? null,
-              remark: answers[qid]?.remark ?? null,
-            })),
-          }
-        : {}),
-      ...(dirty.sectionIds.size
-        ? {
-            sectionRemarks: [...dirty.sectionIds].map((sid) => ({
-              sectionId: sid,
-              remark: sectionRemarks[sid] ?? null,
-            })),
-          }
-        : {}),
-      ...(dirty.overallChanged ? { overallComment } : {}),
-      // ACPT fields are sent as a group — if any changed we persist all three
-      // so the server always sees a consistent snapshot.
-      ...(dirty.acptChanged
-        ? {
-            acptCategory,
-            acptLevel2: acptLevel2.trim() || null,
-            acptLevel3: acptLevel3.trim() || null,
-          }
-        : {}),
-      // Audit-level qualitative notes.
-      ...(dirty.notesChanged
-        ? {
-            callObservation: callObservation.trim() || null,
-            areaOfImprovement: areaOfImprovement.trim() || null,
-          }
-        : {}),
-    };
+    // --- 1) Snapshot dirty + current values from refs (authoritative)
+    const snapshotAnswerIds = new Set(dirty.answerIds);
+    const snapshotSectionIds = new Set(dirty.sectionIds);
+    const snapshotOverall = dirty.overallChanged;
+    const snapshotAcpt = dirty.acptChanged;
+    const snapshotNotes = dirty.notesChanged;
+    const snapshotCallMeta = dirty.callMetaChanged;
 
+    const payload: UpdateAuditPayload = {};
+
+    if (snapshotAnswerIds.size > 0) {
+      payload.answers = [...snapshotAnswerIds].map((qid) => ({
+        questionId: qid,
+        value: answersRef.current[qid]?.value ?? null,
+        remark: answersRef.current[qid]?.remark ?? null,
+      }));
+    }
+
+    if (snapshotSectionIds.size > 0) {
+      payload.sectionRemarks = [...snapshotSectionIds].map((sid) => ({
+        sectionId: sid,
+        remark: sectionRemarksRef.current[sid] ?? null,
+      }));
+    }
+
+    if (snapshotOverall) {
+      payload.overallComment = overallCommentRef.current;
+    }
+
+    if (snapshotAcpt) {
+      payload.acptCategory = acptCategoryRef.current;
+      payload.acptLevel2 = acptLevel2Ref.current.trim() || null;
+      payload.acptLevel3 = acptLevel3Ref.current.trim() || null;
+    }
+
+    if (snapshotNotes) {
+      payload.callObservation = callObservationRef.current.trim() || null;
+      payload.areaOfImprovement = areaOfImprovementRef.current.trim() || null;
+    }
+
+    if (snapshotCallMeta) {
+      payload.callDate = normalizeCallDate(callDateRef.current);
+      payload.callDuration = parseDurationToSeconds(callDurationRef.current);
+    }
+
+    // --- 2) Optimistically clear dirty BEFORE awaiting the request.
+    //        Anything the user types from this moment on re-marks the
+    //        slot and stays in `dirty`, so it persists on next flush.
+    dirty.answerIds = new Set();
+    dirty.sectionIds = new Set();
+    dirty.overallChanged = false;
+    dirty.acptChanged = false;
+    dirty.notesChanged = false;
+    dirty.callMetaChanged = false;
+
+    flushInFlight.current = true;
     setSaving(true);
     try {
       const updated = await updateAudit(audit.id, payload);
-      setAudit(updated);
-      // Refresh the live-score-driving derived fields from the server
-      // (sectionScore, totalScore, finalScore).
-      dirty.answerIds.clear();
-      dirty.sectionIds.clear();
-      dirty.overallChanged = false;
-      dirty.acptChanged = false;
-      dirty.notesChanged = false;
+
+      // --- 3) Merge only audit metadata. Preserve the local draft —
+      //        every textarea / chip is still bound to its own state.
+      setAudit((prev) => mergeServerAudit(prev, updated));
+
+      // If the user typed more changes during the request, they're
+      // already back in `dirtyRef` thanks to the optimistic clear.
+      // Schedule a follow-up flush so they don't have to wait for
+      // another keystroke to trigger one.
+      if (
+        dirty.answerIds.size > 0 ||
+        dirty.sectionIds.size > 0 ||
+        dirty.overallChanged ||
+        dirty.acptChanged ||
+        dirty.notesChanged ||
+        dirty.callMetaChanged
+      ) {
+        if (autosaveTimer.current) {
+          window.clearTimeout(autosaveTimer.current);
+        }
+        autosaveTimer.current = window.setTimeout(() => {
+          void flushAutosave();
+        }, AUTOSAVE_DEBOUNCE_MS);
+      }
+      return true;
     } catch (e) {
       console.error(e);
-      toast.error("Autosave failed");
+      toast.error("Autosave failed — your last edits will retry shortly.");
+      // --- 4) Re-mark the snapshot entries dirty so we retry. Use
+      //        `.add` rather than overwrite so any newer dirty entries
+      //        (added by the user while the request was in flight) are
+      //        kept intact.
+      for (const qid of snapshotAnswerIds) dirty.answerIds.add(qid);
+      for (const sid of snapshotSectionIds) dirty.sectionIds.add(sid);
+      if (snapshotOverall) dirty.overallChanged = true;
+      if (snapshotAcpt) dirty.acptChanged = true;
+      if (snapshotNotes) dirty.notesChanged = true;
+      if (snapshotCallMeta) dirty.callMetaChanged = true;
+      // Re-schedule so the retry actually happens.
+      if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current);
+      autosaveTimer.current = window.setTimeout(() => {
+        void flushAutosave();
+      }, AUTOSAVE_DEBOUNCE_MS);
+      return false;
     } finally {
+      flushInFlight.current = false;
       setSaving(false);
     }
-  }, [audit, answers, sectionRemarks, overallComment, acptCategory, acptLevel2, acptLevel3, callObservation, areaOfImprovement]);
+    // The callback never reads React-state directly (we use refs), so
+    // its deps are intentionally minimal — only `audit` because we
+    // need the current audit id and to know whether to no-op.
+  }, [audit]);
 
   const scheduleAutosave = useCallback(() => {
     if (!audit) return;
@@ -436,10 +613,18 @@ export function NewAuditWizard({
 
   const onAnswer = useCallback(
     (questionId: number, value: string | null) => {
-      setAnswers((prev) => ({
-        ...prev,
-        [questionId]: { ...(prev[questionId] ?? {}), value, remark: prev[questionId]?.remark ?? "" },
-      }));
+      setAnswers((prev) => {
+        const next = {
+          ...prev,
+          [questionId]: {
+            ...(prev[questionId] ?? {}),
+            value,
+            remark: prev[questionId]?.remark ?? "",
+          },
+        };
+        answersRef.current = next;
+        return next;
+      });
       dirtyRef.current.answerIds.add(questionId);
       scheduleAutosave();
     },
@@ -448,13 +633,17 @@ export function NewAuditWizard({
 
   const onAnswerRemark = useCallback(
     (questionId: number, remark: string) => {
-      setAnswers((prev) => ({
-        ...prev,
-        [questionId]: {
-          value: prev[questionId]?.value ?? null,
-          remark,
-        },
-      }));
+      setAnswers((prev) => {
+        const next = {
+          ...prev,
+          [questionId]: {
+            value: prev[questionId]?.value ?? null,
+            remark,
+          },
+        };
+        answersRef.current = next;
+        return next;
+      });
       dirtyRef.current.answerIds.add(questionId);
       scheduleAutosave();
     },
@@ -463,7 +652,11 @@ export function NewAuditWizard({
 
   const onSectionRemark = useCallback(
     (sectionId: number, remark: string) => {
-      setSectionRemarks((prev) => ({ ...prev, [sectionId]: remark }));
+      setSectionRemarks((prev) => {
+        const next = { ...prev, [sectionId]: remark };
+        sectionRemarksRef.current = next;
+        return next;
+      });
       dirtyRef.current.sectionIds.add(sectionId);
       scheduleAutosave();
     },
@@ -473,6 +666,7 @@ export function NewAuditWizard({
   const onOverallComment = useCallback(
     (next: string) => {
       setOverallComment(next);
+      overallCommentRef.current = next;
       dirtyRef.current.overallChanged = true;
       scheduleAutosave();
     },
@@ -484,6 +678,7 @@ export function NewAuditWizard({
   const onAcptCategory = useCallback(
     (val: string | null) => {
       setAcptCategory(val);
+      acptCategoryRef.current = val;
       dirtyRef.current.acptChanged = true;
       scheduleAutosave();
     },
@@ -493,6 +688,7 @@ export function NewAuditWizard({
   const onAcptLevel2 = useCallback(
     (val: string) => {
       setAcptLevel2(val);
+      acptLevel2Ref.current = val;
       dirtyRef.current.acptChanged = true;
       scheduleAutosave();
     },
@@ -502,6 +698,7 @@ export function NewAuditWizard({
   const onAcptLevel3 = useCallback(
     (val: string) => {
       setAcptLevel3(val);
+      acptLevel3Ref.current = val;
       dirtyRef.current.acptChanged = true;
       scheduleAutosave();
     },
@@ -512,6 +709,7 @@ export function NewAuditWizard({
   const onCallObservation = useCallback(
     (val: string) => {
       setCallObservation(val);
+      callObservationRef.current = val;
       dirtyRef.current.notesChanged = true;
       scheduleAutosave();
     },
@@ -521,7 +719,32 @@ export function NewAuditWizard({
   const onAreaOfImprovement = useCallback(
     (val: string) => {
       setAreaOfImprovement(val);
+      areaOfImprovementRef.current = val;
       dirtyRef.current.notesChanged = true;
+      scheduleAutosave();
+    },
+    [scheduleAutosave],
+  );
+
+  // Call meta (date + duration) — both share `callMetaChanged` so they
+  // persist together. Duration accepts free-form input (MM:SS / H:MM:SS
+  // / "12m 30s") and is parsed at flush time, not on every keystroke,
+  // so the supervisor can type at their own pace.
+  const onCallDate = useCallback(
+    (val: string) => {
+      setCallDate(val);
+      callDateRef.current = val;
+      dirtyRef.current.callMetaChanged = true;
+      scheduleAutosave();
+    },
+    [scheduleAutosave],
+  );
+
+  const onCallDuration = useCallback(
+    (val: string) => {
+      setCallDuration(val);
+      callDurationRef.current = val;
+      dirtyRef.current.callMetaChanged = true;
       scheduleAutosave();
     },
     [scheduleAutosave],
@@ -613,6 +836,11 @@ export function NewAuditWizard({
         acptLevel3: acptLevel3.trim() || null,
         callObservation: callObservation.trim() || null,
         areaOfImprovement: areaOfImprovement.trim() || null,
+        // Persist the latest call meta in the same round-trip so the
+        // submitted audit always reflects what the supervisor sees on
+        // screen at submit time.
+        callDate: normalizeCallDate(callDate),
+        callDuration: parseDurationToSeconds(callDuration),
       });
       setAudit(finalAudit);
       // Re-ingest the finalized server detail so the UI mirrors what
@@ -624,6 +852,7 @@ export function NewAuditWizard({
       dirtyRef.current.overallChanged = false;
       dirtyRef.current.acptChanged = false;
       dirtyRef.current.notesChanged = false;
+      dirtyRef.current.callMetaChanged = false;
       toast.success(`Audit ${finalAudit.auditCode} submitted`);
     } catch (e) {
       const err = e as AxiosError<{ message?: string | string[] }>;
@@ -740,6 +969,21 @@ export function NewAuditWizard({
   // ------------------------------------------------------------
 
   const selectedAgent = agents.find((a) => a.id === agentId) ?? null;
+
+  /**
+   * Searchable agent list. Filter is case-insensitive and matches
+   * against the agent's display name and @username so a supervisor
+   * can find someone whether they remember the full name or the
+   * handle. Memoized so typing stays snappy even with hundreds of
+   * agents.
+   */
+  const filteredAgents = useMemo(() => {
+    const term = agentSearch.trim().toLowerCase();
+    if (!term) return agents;
+    return agents.filter((a) =>
+      `${a.name} ${a.username}`.toLowerCase().includes(term),
+    );
+  }, [agents, agentSearch]);
   const selectedProject: Project | null = useMemo(() => {
     if (!projectId) return null;
     for (const g of groups) {
@@ -811,29 +1055,57 @@ export function NewAuditWizard({
               description="Add an agent in the Agents page first."
             />
           ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {agents.map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  onClick={() => handleSelectAgent(a.id)}
-                  className={cn(
-                    "flex items-center gap-3 rounded-md border bg-bg-elevated p-3 text-left transition-colors",
-                    agentId === a.id
-                      ? "border-accent/40 ring-1 ring-accent/30"
-                      : "border-border hover:bg-bg-muted",
-                  )}
-                >
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-accent/15 text-xs font-semibold text-accent">
-                    {a.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-fg">{a.name}</p>
-                    <p className="truncate text-xs text-fg-subtle">@{a.username}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
+            <>
+              {/* Searchable picker — supervisors with 50+ direct reports
+                  can't scan a flat grid; the filter makes selection
+                  one-keystroke fast. Auto-advance still kicks in when
+                  the supervisor clicks a result. */}
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-fg-subtle">
+                  {filteredAgents.length} of {agents.length} agent
+                  {agents.length === 1 ? "" : "s"}
+                </p>
+                <div className="w-full max-w-xs">
+                  <SearchInput
+                    value={agentSearch}
+                    onChange={(e) => setAgentSearch(e.target.value)}
+                    onClear={() => setAgentSearch("")}
+                    placeholder="Search by name or @username…"
+                    autoFocus
+                  />
+                </div>
+              </div>
+              {filteredAgents.length === 0 ? (
+                <EmptyState
+                  title="No matching agents"
+                  description="Try a different name or @username."
+                />
+              ) : (
+                <div className="grid max-h-[420px] gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                  {filteredAgents.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => handleSelectAgent(a.id)}
+                      className={cn(
+                        "flex items-center gap-3 rounded-md border bg-bg-elevated p-3 text-left transition-colors",
+                        agentId === a.id
+                          ? "border-accent/40 ring-1 ring-accent/30"
+                          : "border-border hover:bg-bg-muted",
+                      )}
+                    >
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-accent/15 text-xs font-semibold text-accent">
+                        {a.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-fg">{a.name}</p>
+                        <p className="truncate text-xs text-fg-subtle">@{a.username}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </StepShell>
       )}
@@ -916,36 +1188,96 @@ export function NewAuditWizard({
 
       {step === "call" && (
         <StepShell title="Call reference">
-          <div className="max-w-md">
-            <label className="text-xs font-medium text-fg-muted">
-              Call reference / recording id
-            </label>
-            <input
-              value={callReference}
-              // Input mask: keep digits only and cap at 10 characters so
-              // the field cannot accept anything that would fail backend
-              // validation. Trimming + stripping non-digits handles the
-              // common paste case (e.g. "CALL-1234567890").
-              onChange={(e) => {
-                const digits = e.target.value.replace(/\D+/g, "").slice(0, 10);
-                setCallReference(digits);
-              }}
-              inputMode="numeric"
-              pattern="\d{10}"
-              maxLength={10}
-              placeholder="e.g. 1234567890"
-              className={cn(fieldClass, "mt-1.5 tracking-widest tabular-nums")}
-              autoFocus
-            />
-            <p className="mt-2 text-xs text-fg-subtle">
-              Must be exactly 10 digits — the recording / call ID. Unique per agent.
-            </p>
-            {callReference.length > 0 && callReference.length < 10 && (
-              <p className="mt-1 text-xs text-warning">
-                {10 - callReference.length} more digit
-                {10 - callReference.length === 1 ? "" : "s"} needed.
+          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px_180px]">
+            <div>
+              <label className="text-xs font-medium text-fg-muted">
+                Call reference / recording id
+              </label>
+              <input
+                value={callReference}
+                // Input mask: keep digits only and cap at 10 characters so
+                // the field cannot accept anything that would fail backend
+                // validation. Trimming + stripping non-digits handles the
+                // common paste case (e.g. "CALL-1234567890").
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D+/g, "").slice(0, 10);
+                  setCallReference(digits);
+                }}
+                inputMode="numeric"
+                pattern="\d{10}"
+                maxLength={10}
+                placeholder="e.g. 1234567890"
+                className={cn(fieldClass, "mt-1.5 tracking-widest tabular-nums")}
+                autoFocus
+              />
+              <p className="mt-2 text-xs text-fg-subtle">
+                Must be exactly 10 digits — the recording / call ID.
+                Duplicates are allowed (the same call can be audited more
+                than once).
               </p>
-            )}
+              {callReference.length > 0 && callReference.length < 10 && (
+                <p className="mt-1 text-xs text-warning">
+                  {10 - callReference.length} more digit
+                  {10 - callReference.length === 1 ? "" : "s"} needed.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-fg-muted">
+                Call date <span className="text-fg-subtle">(optional)</span>
+              </label>
+              <input
+                type="date"
+                value={callDate}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  // Update local + ref before audit row exists so the
+                  // value can be sent on createAudit.  Once the audit
+                  // exists, mark it dirty so autosave persists changes.
+                  if (audit) {
+                    onCallDate(v);
+                  } else {
+                    setCallDate(v);
+                    callDateRef.current = v;
+                  }
+                }}
+                disabled={isReadOnly}
+                className={cn(
+                  fieldClass,
+                  "mt-1.5",
+                  isReadOnly && "cursor-not-allowed opacity-70",
+                )}
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-fg-muted">
+                Call duration <span className="text-fg-subtle">(optional)</span>
+              </label>
+              <input
+                value={callDuration}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (audit) {
+                    onCallDuration(v);
+                  } else {
+                    setCallDuration(v);
+                    callDurationRef.current = v;
+                  }
+                }}
+                placeholder="e.g. 12:30"
+                disabled={isReadOnly}
+                className={cn(
+                  fieldClass,
+                  "mt-1.5 tabular-nums",
+                  isReadOnly && "cursor-not-allowed opacity-70",
+                )}
+              />
+              <p className="mt-1 text-[11px] text-fg-subtle">
+                MM:SS, H:MM:SS, or "12m 30s"
+              </p>
+            </div>
           </div>
         </StepShell>
       )}
@@ -1118,6 +1450,18 @@ export function NewAuditWizard({
                   value={selectedProject?.projectName ?? audit.projectNameSnapshot}
                 />
                 <ReviewItem label="Call reference" value={audit.callReference} />
+                <ReviewItem
+                  label="Call date"
+                  value={callDate ? callDate : "—"}
+                />
+                <ReviewItem
+                  label="Call duration"
+                  value={
+                    callDuration ||
+                    formatDurationSeconds(audit.callDuration ?? null) ||
+                    "—"
+                  }
+                />
                 <ReviewItem
                   label="Status"
                   value={audit.status === AuditStatus.SUBMITTED ? "Submitted" : "In progress"}
@@ -1451,6 +1795,93 @@ function ReviewItem({ label, value }: { label: string; value: string }) {
       <dd className="mt-0.5 text-sm text-fg">{value}</dd>
     </div>
   );
+}
+
+/**
+ * Merge an updated audit detail from the server into the previous one
+ * without clobbering the user's in-flight draft state.
+ *
+ * Background: the autosave flush sends only what's dirty and the
+ * server returns the full audit. Naively running `setAudit(updated)`
+ * would, on every successful save, overwrite the local audit including
+ * server-side `sections[].questions[].answer` rows. The user's draft
+ * `answers` map is the authoritative source for the editor, but the
+ * audit's section/question metadata (score, fatal flag, etc.) IS the
+ * server's job to compute. So we keep the server's structure and just
+ * preserve any fields the user is still typing into.
+ *
+ * In practice today we keep the whole server response — the editor
+ * reads from the `answers` state directly, not from `audit.sections`.
+ * The helper exists so future fields that the editor binds to `audit`
+ * directly can be guarded.
+ */
+function mergeServerAudit(
+  prev: AuditDetail | null,
+  updated: AuditDetail,
+): AuditDetail {
+  if (!prev) return updated;
+  return { ...prev, ...updated };
+}
+
+/**
+ * Convert a YYYY-MM-DD string from the date input into an ISO timestamp
+ * the backend expects. Empty → null (used to clear the field).
+ */
+function normalizeCallDate(raw: string): string | null {
+  const v = raw.trim();
+  if (!v) return null;
+  // Already ISO or full timestamp — pass through.
+  if (/T\d/.test(v)) return v;
+  // YYYY-MM-DD → midnight UTC ISO so it lands cleanly in DATETIME(3).
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return `${v}T00:00:00.000Z`;
+  return v;
+}
+
+/**
+ * Parse a free-form duration entry into integer seconds. Accepts:
+ *   - "12:30"      → 12 * 60 + 30
+ *   - "1:02:30"    → 1 hour 2 min 30 sec
+ *   - "12m 30s"    → 12 min 30 sec
+ *   - "750"        → 750 seconds
+ *   - ""           → null (clear)
+ *
+ * Returns null when the input is empty or unparseable.
+ */
+function parseDurationToSeconds(raw: string): number | null {
+  const v = raw.trim();
+  if (!v) return null;
+
+  // Colon form (mm:ss or hh:mm:ss).
+  if (v.includes(":")) {
+    const parts = v.split(":").map((p) => p.trim());
+    if (parts.length === 2 || parts.length === 3) {
+      const nums = parts.map((p) => Number(p));
+      if (nums.some((n) => !Number.isFinite(n) || n < 0)) return null;
+      if (parts.length === 2) return Math.floor(nums[0] * 60 + nums[1]);
+      return Math.floor(nums[0] * 3600 + nums[1] * 60 + nums[2]);
+    }
+    return null;
+  }
+
+  // "12m 30s" / "1h 2m" style.
+  const unitRe = /(\d+)\s*(h|m|s)/gi;
+  let total = 0;
+  let matched = false;
+  let m: RegExpExecArray | null;
+  while ((m = unitRe.exec(v)) !== null) {
+    matched = true;
+    const n = Number(m[1]);
+    const unit = m[2].toLowerCase();
+    if (unit === "h") total += n * 3600;
+    else if (unit === "m") total += n * 60;
+    else total += n;
+  }
+  if (matched) return total;
+
+  // Bare integer = seconds.
+  const n = Number(v);
+  if (Number.isFinite(n) && n >= 0) return Math.floor(n);
+  return null;
 }
 
 export default NewAuditWizard;

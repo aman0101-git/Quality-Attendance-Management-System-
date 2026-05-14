@@ -12,7 +12,13 @@ import { AppCard } from "@/components/ui/AppCard";
 import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SearchInput } from "@/components/ui/SearchInput";
-import { cn, formatAuditScore, formatDateTime, qualityLabel } from "@/lib/utils";
+import {
+  cn,
+  formatAuditScore,
+  formatDateTime,
+  formatDurationSeconds,
+  qualityLabel,
+} from "@/lib/utils";
 import AuditStatusBadge from "@/features/audits/components/AuditStatusBadge";
 import { AuditStatus } from "@/features/audits/types";
 import { getMyAudits } from "@/features/agent-audits/api";
@@ -113,14 +119,29 @@ export default function MyAuditsPage() {
       {
         key: "audit",
         header: "Audit",
-        cell: (row) => (
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-fg">{row.auditCode}</span>
-            <span className="truncate text-xs text-fg-subtle">
-              {row.callReference}
-            </span>
-          </div>
-        ),
+        cell: (row) => {
+          const dateLabel =
+            row.callDate
+              ? new Date(row.callDate).toLocaleDateString()
+              : null;
+          const durationLabel = formatDurationSeconds(row.callDuration ?? null);
+          return (
+            <div className="flex flex-col">
+              <span className="text-sm font-medium text-fg">{row.auditCode}</span>
+              <span className="truncate text-xs text-fg-subtle">
+                {row.callReference}
+                {(dateLabel || durationLabel) && (
+                  <>
+                    {" · "}
+                    {dateLabel ?? ""}
+                    {dateLabel && durationLabel ? " · " : ""}
+                    {durationLabel}
+                  </>
+                )}
+              </span>
+            </div>
+          );
+        },
       },
       {
         key: "context",

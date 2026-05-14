@@ -2,9 +2,13 @@ import { Type } from "class-transformer";
 import {
   IsArray,
   IsIn,
+  IsInt,
+  IsISO8601,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
+  Min,
   ValidateNested,
 } from "class-validator";
 import { ACPT_CATEGORIES, ACPT_LEVEL_MAX, AUDIT_NOTE_MAX, OVERALL_COMMENT_MAX } from "../audit.constants";
@@ -60,6 +64,18 @@ export class SubmitAuditDto {
   @IsString()
   @MaxLength(AUDIT_NOTE_MAX)
   areaOfImprovement?: string | null;
+
+  /** ISO date/time string. Null to clear. */
+  @IsOptional()
+  @IsISO8601({}, { message: "Call date must be an ISO date or timestamp" })
+  callDate?: string | null;
+
+  /** Duration in seconds. Null to clear. */
+  @IsOptional()
+  @IsInt({ message: "Call duration must be an integer (seconds)" })
+  @Min(0)
+  @Max(60 * 60 * 24)
+  callDuration?: number | null;
 }
 
 /**

@@ -108,6 +108,16 @@ export interface AuditListItem {
   callObservation: string | null;
   /** Supervisor's improvement notes for the agent. Null if not filled. */
   areaOfImprovement: string | null;
+
+  // -----------------------------------------------------------------------
+  //  Phase 1 — call metadata.  Both null on legacy audits (pre-callDate
+  //  migration).  Persisted on autosave + submit so they're available
+  //  everywhere the audit is read (supervisor / agent / list views).
+  // -----------------------------------------------------------------------
+  /** ISO timestamp string of when the audited call took place. Null if not filled. */
+  callDate: string | null;
+  /** Duration of the audited call in seconds. Null if not filled. */
+  callDuration: number | null;
 }
 
 export interface AuditQuestionOption {

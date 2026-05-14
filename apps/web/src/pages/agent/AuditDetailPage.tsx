@@ -19,7 +19,13 @@ import { AppCard } from "@/components/ui/AppCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import Modal from "@/components/ui/Modal";
-import { cn, formatAuditScore, formatDateTime, qualityLabel } from "@/lib/utils";
+import {
+  cn,
+  formatAuditScore,
+  formatDateTime,
+  formatDurationSeconds,
+  qualityLabel,
+} from "@/lib/utils";
 import {
   acknowledgeAudit,
   getMyAuditById,
@@ -42,8 +48,28 @@ function scoreToneClass(value: number | null, fatal: boolean): string {
   return "text-danger";
 }
 
+/**
+ * Map a question's recorded answer to a tri-state pass/fail/NA result
+ * for the agent-side breakdown.
+ *
+ *   - YES → Pass  (normalizedScore === 1)
+ *   - NO  → Fail  (normalizedScore === 0)
+ *   - N/A → N/A   (value === "na" OR normalizedScore === null)
+ *   - unanswered → N/A (no `answer` row, or blank value)
+ *
+ * This is presentation-only — it does NOT change the scoring engine.
+ * Before this fix, N/A answers fell into the "passed === false" branch
+ * because `normalizedScore === 1` is false when normalizedScore is
+ * null, which incorrectly rendered them as "Fail" on the agent view.
+ */
 function isQuestionPassed(q: AgentAuditQuestion): boolean | null {
   if (!q.answer || q.answer.value === null || q.answer.value === "") {
+    return null;
+  }
+  // YES_NO N/A answers are stored as the literal "na" string and the
+  // server records normalizedScore = null (the score engine treats
+  // them as non-scoring). Either signal is sufficient to render N/A.
+  if (q.answer.value === "na" || q.answer.normalizedScore === null) {
     return null;
   }
   return q.answer.normalizedScore === 1;
@@ -269,6 +295,18 @@ export default function AuditDetailPage() {
             <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <KV label="Call reference" value={audit.callReference} />
               <KV label="Supervisor" value={audit.supervisor.name} />
+              {audit.callDate && (
+                <KV
+                  label="Call date"
+                  value={new Date(audit.callDate).toLocaleDateString()}
+                />
+              )}
+              {audit.callDuration !== null && audit.callDuration !== undefined && (
+                <KV
+                  label="Call duration"
+                  value={formatDurationSeconds(audit.callDuration)}
+                />
+              )}
               <KV label="Audit date" value={formatDateTime(audit.createdAt)} />
               <KV label="Published" value={formatDateTime(audit.publishedAt)} />
               {audit.reviewedAt && (

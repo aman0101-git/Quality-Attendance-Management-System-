@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   ForbiddenException,
   Injectable,
   InternalServerErrorException,
@@ -116,23 +115,13 @@ export class AuditsService {
       throw new BadRequestException("Project not found or inactive");
     }
 
-    // Make sure we don't create a duplicate for the same call reference.
-    // Any existing audit for this agent+call (in any non-terminal status,
-    // including PUBLISHED/REVIEWED) blocks a new draft. Discarded
-    // (soft-deleted) audits free their call reference for re-use so
-    // the supervisor can throw away a mistaken draft and start over.
-    const existing = await this.prisma.audit.findFirst({
-      where: {
-        agentId: dto.agentId,
-        callReference: dto.callReference.trim(),
-        deletedAt: null,
-      },
-    });
-    if (existing) {
-      throw new ConflictException(
-        `An audit for this call reference already exists in status ${existing.status}.`,
-      );
-    }
+    // Phase 1 change: duplicate call recording IDs are now explicitly
+    // allowed. The previous uniqueness check (per-agent, per-call) has
+    // been intentionally removed — multiple audits can reference the
+    // same recording (e.g. re-audit by a different supervisor, or
+    // multiple QA passes on the same call).  Search and filter by
+    // `callReference` still works (an explicit index was added to
+    // keep it cheap).
 
     const auditCode = await this.generateAuditCode();
 
@@ -152,6 +141,12 @@ export class AuditsService {
         groupNameSnapshot: project.groupName,
         projectNameSnapshot: project.projectName,
         callReference: dto.callReference.trim(),
+        // Optional Phase 1 fields — persisted on create if the supervisor
+        // entered them in the wizard's call step.
+        ...(dto.callDate ? { callDate: new Date(dto.callDate) } : {}),
+        ...(typeof dto.callDuration === "number"
+          ? { callDuration: dto.callDuration }
+          : {}),
         scorecardTemplateId: template.id,
         createdById: actor.id,
         scorecardSnapshot: this.snapshotTemplate(template),
@@ -287,6 +282,22 @@ export class AuditsService {
       });
     }
 
+    // Persist Phase 1 call metadata. Both fields are independently
+    // settable; explicit `null` clears the column.
+    if (dto.callDate !== undefined || dto.callDuration !== undefined) {
+      await this.prisma.audit.update({
+        where: { id: audit.id },
+        data: {
+          ...(dto.callDate !== undefined
+            ? { callDate: dto.callDate ? new Date(dto.callDate) : null }
+            : {}),
+          ...(dto.callDuration !== undefined
+            ? { callDuration: dto.callDuration ?? null }
+            : {}),
+        },
+      });
+    }
+
     if (dto.answers && dto.answers.length > 0) {
       await this.upsertAnswers(audit.id, dto.answers);
     }
@@ -371,6 +382,22 @@ export class AuditsService {
             : {}),
           ...(dto.areaOfImprovement !== undefined
             ? { areaOfImprovement: dto.areaOfImprovement ?? null }
+            : {}),
+        },
+      });
+    }
+
+    // Persist Phase 1 call metadata at submit time as well so a submit
+    // without an intervening autosave still carries the latest values.
+    if (dto.callDate !== undefined || dto.callDuration !== undefined) {
+      await this.prisma.audit.update({
+        where: { id: audit.id },
+        data: {
+          ...(dto.callDate !== undefined
+            ? { callDate: dto.callDate ? new Date(dto.callDate) : null }
+            : {}),
+          ...(dto.callDuration !== undefined
+            ? { callDuration: dto.callDuration ?? null }
             : {}),
         },
       });
@@ -1008,6 +1035,8 @@ function toListItem(row: {
   acptLevel3?: string | null;
   callObservation?: string | null;
   areaOfImprovement?: string | null;
+  callDate?: Date | null;
+  callDuration?: number | null;
   agent: { id: string; name: string; username: string };
   supervisor: { id: string; name: string; username: string };
   project: { id: number; projectName: string; groupName: string };
@@ -1046,6 +1075,8 @@ function toListItem(row: {
     acptLevel3: row.acptLevel3 ?? null,
     callObservation: row.callObservation ?? null,
     areaOfImprovement: row.areaOfImprovement ?? null,
+    callDate: row.callDate ?? null,
+    callDuration: row.callDuration ?? null,
   };
 }
 
