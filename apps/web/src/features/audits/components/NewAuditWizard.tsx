@@ -1303,6 +1303,49 @@ export function NewAuditWizard({
                   onAnswer={onAnswer}
                   onAnswerRemark={onAnswerRemark}
                 />
+
+                {/* Audit-level qualitative notes — below the question list */}
+                <div className="mt-4 rounded-lg border border-border bg-surface p-4">
+                  <p className="mb-4 text-[11px] font-medium uppercase tracking-wider text-fg-muted">
+                    Call notes
+                  </p>
+
+                  <div className="mb-4">
+                    <label className="text-xs font-medium text-fg-muted">
+                      Call Observation
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={callObservation}
+                      onChange={(e) => onCallObservation(e.target.value)}
+                      placeholder="Describe what was observed during the call…"
+                      disabled={isReadOnly}
+                      className={cn(
+                        fieldClass,
+                        "mt-1.5 h-auto resize-none py-2 leading-relaxed",
+                        isReadOnly && "cursor-not-allowed opacity-70",
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-fg-muted">
+                      Area of Improvement
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={areaOfImprovement}
+                      onChange={(e) => onAreaOfImprovement(e.target.value)}
+                      placeholder="Identify areas where the agent can improve…"
+                      disabled={isReadOnly}
+                      className={cn(
+                        fieldClass,
+                        "mt-1.5 h-auto resize-none py-2 leading-relaxed",
+                        isReadOnly && "cursor-not-allowed opacity-70",
+                      )}
+                    />
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -1384,49 +1427,6 @@ export function NewAuditWizard({
                 isReadOnly && "cursor-not-allowed opacity-70",
               )}
             />
-          </div>
-
-          {/* Audit-level qualitative notes */}
-          <div className="mt-6 border-t border-border pt-5">
-            <p className="mb-4 text-[11px] font-medium uppercase tracking-wider text-fg-muted">
-              Call notes
-            </p>
-
-            <div className="mb-4">
-              <label className="text-xs font-medium text-fg-muted">
-                Call Observation
-              </label>
-              <textarea
-                rows={4}
-                value={callObservation}
-                onChange={(e) => onCallObservation(e.target.value)}
-                placeholder="Describe what was observed during the call…"
-                disabled={isReadOnly}
-                className={cn(
-                  fieldClass,
-                  "mt-1.5 h-auto resize-none py-2 leading-relaxed",
-                  isReadOnly && "cursor-not-allowed opacity-70",
-                )}
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-fg-muted">
-                Area of Improvement
-              </label>
-              <textarea
-                rows={4}
-                value={areaOfImprovement}
-                onChange={(e) => onAreaOfImprovement(e.target.value)}
-                placeholder="Identify areas where the agent can improve…"
-                disabled={isReadOnly}
-                className={cn(
-                  fieldClass,
-                  "mt-1.5 h-auto resize-none py-2 leading-relaxed",
-                  isReadOnly && "cursor-not-allowed opacity-70",
-                )}
-              />
-            </div>
           </div>
 
           {isReadOnly && (
