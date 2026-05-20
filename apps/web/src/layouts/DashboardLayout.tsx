@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Outlet, useLocation } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import { Outlet } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import MobileSidebar from "./MobileSidebar";
 import Header from "./Header";
@@ -11,12 +10,22 @@ import { useSidebarState } from "@/hooks/useSidebarState";
  *
  * - Renders persistent desktop sidebar + mobile drawer
  * - Sticky glass header
- * - Animates between routes via location-key
+ * - Renders the active route via React Router's <Outlet />
+ *
+ * NOTE: We deliberately do NOT wrap <Outlet /> in framer-motion's
+ * `<AnimatePresence mode="wait">` here. That setup created a stacking
+ * context with `transform: translate3d(...)` and `will-change` on
+ * every page, which compounded with PageContainer's and per-page
+ * motion wrappers — three nested transformed containers were enough
+ * to break text-selection hit-testing in Chromium/Brave (Ctrl+A /
+ * Ctrl+C / right-click "Copy" stopped working, and click positions
+ * could land "between" the transformed layers). Each individual page
+ * still owns its own fade-in via PageContainer, so the visual feel
+ * is preserved.
  */
 export function DashboardLayout() {
   const { collapsed, toggle } = useSidebarState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const location = useLocation();
 
   return (
     <div className="relative flex min-h-screen w-full bg-bg text-fg">
@@ -27,17 +36,7 @@ export function DashboardLayout() {
         <Header onOpenMobileNav={() => setMobileOpen(true)} />
 
         <main className="flex-1">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={location.pathname}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <Outlet />
-            </motion.div>
-          </AnimatePresence>
+          <Outlet />
         </main>
       </div>
     </div>

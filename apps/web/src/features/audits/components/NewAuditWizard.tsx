@@ -1324,7 +1324,9 @@ export function NewAuditWizard({
                         fieldClass,
                         "mt-1.5 h-auto resize-none py-2 leading-relaxed",
                         isReadOnly && "cursor-not-allowed opacity-70",
+                        "select-text"
                       )}
+                      style={{ WebkitUserSelect: 'text', userSelect: 'text' }}
                     />
                   </div>
 
@@ -1342,7 +1344,9 @@ export function NewAuditWizard({
                         fieldClass,
                         "mt-1.5 h-auto resize-none py-2 leading-relaxed",
                         isReadOnly && "cursor-not-allowed opacity-70",
+                        "select-text"
                       )}
+                      style={{ WebkitUserSelect: 'text', userSelect: 'text' }}
                     />
                   </div>
                 </div>

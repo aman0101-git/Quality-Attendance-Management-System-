@@ -91,9 +91,103 @@
       color var(--duration-base) var(--ease-out-soft);
   }
 
+  /* ----------------------------------------------------------
+   * Text selection / copy-paste baseline (HIGH PRIORITY)
+   * ----------------------------------------------------------
+   * Explicitly opt the entire app into normal browser
+   * text-selection and clipboard behavior. This guarantees
+   * Ctrl+A / Ctrl+C / Ctrl+V, right-click "Copy", and
+   * click-drag selection all work across dashboards, audit
+   * pages, scorecards, reports, forms, and detail pages — even
+   * when content is inside transformed parents (framer-motion
+   * `motion.div` wrappers create new stacking contexts that
+   * can otherwise suppress text selection in Chromium/Brave).
+   *
+   * `!important` is used deliberately so no ancestor utility
+   * class, third-party library, or browser extension can
+   * accidentally re-disable selection. Components that
+   * legitimately need non-selectable text (Radix DropdownMenu
+   * items, sidebar nav labels, drag handles) still opt out
+   * per-element with `.select-none` — which is re-asserted
+   * below so it keeps winning despite the baseline `!important`.
+   * ---------------------------------------------------------- */
+  html,
+  body,
+  #root,
+  main,
+  section,
+  article,
+  aside,
+  header,
+  footer,
+  nav,
+  div,
+  p,
+  span,
+  h1, h2, h3, h4, h5, h6,
+  dl, dt, dd,
+  ul, ol, li,
+  table, thead, tbody, tr, td, th,
+  label,
+  pre, code,
+  blockquote,
+  figure, figcaption,
+  input,
+  textarea,
+  [contenteditable="true"],
+  [contenteditable=""] {
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    user-select: text !important;
+    -webkit-touch-callout: default !important;
+  }
+
+  /* Re-assert `select-none` so intentional opt-outs (menu items,
+   * drag handles, etc.) still beat the !important baseline above. */
+  .select-none,
+  .select-none * {
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    user-select: none !important;
+  }
+
+  /* Always allow selection in textareas and inputs, even inside .select-none */
+  textarea,
+  input,
+  textarea *,
+  input * {
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    user-select: text !important;
+  }
+
+  /* Hit-testing safety net: make sure the page shell, the React
+   * root, and the main content region always receive pointer
+   * events. This neutralizes any inherited `pointer-events: none`
+   * (e.g. from a stale framer-motion exit animation or a
+   * misconfigured decorative overlay) that could otherwise eat
+   * clicks across the whole app. */
+  html,
+  body,
+  #root,
+  main {
+    pointer-events: auto !important;
+  }
+
+
   ::selection {
     background-color: rgba(var(--accent), 0.32);
     color: rgb(var(--fg));
+  }
+
+  /* Strong highlight for selected text in textarea/input for clarity */
+  textarea::selection,
+  input::selection {
+    background-color: #a5b4fc !important; /* Indigo-200 for strong contrast */
+    color: #111827 !important; /* Gray-900 for readability */
   }
 
   :focus-visible {
